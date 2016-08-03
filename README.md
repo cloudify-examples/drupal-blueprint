@@ -11,18 +11,15 @@ E.G :  Apply patches, invoke security updates etc. <br>
 - An Ubuntu 14.04 image id from your OpenStack account and from your vSphere account <br>
 - An flavor image id of your choice from your OpenStack account <br>
 
-* Tested Version (Most recent Cloudify version must be among them.)
+# Tested Version (Most recent Cloudify version must be among them.)
 
 This blueprint has been test with Cloudify version 3.4.0
 
-* Complete install and uninstall instructions
+# Usage
 
 All you need to do is to set/specify (as an input to the blueprint) the OpenStack image id for Ubuntu 14.04 and the OpenStack flavor Id. <br>
 If you use the Hybrid version, you need to set/specify (as an input to the blueprint) the vsphere_template_name for Ubuntu 14.04.
 
-
-
-# Usage
 
 ### Step 1: Installation
 
