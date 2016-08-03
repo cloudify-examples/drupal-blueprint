@@ -1,0 +1,103 @@
+# DSL version, should appear in the main blueprint.yaml
+# and may appear in other imports. In such case, the versions must match
+tosca_definitions_version: cloudify_dsl_1_0
+
+imports:
+    - http://www.getcloudify.org/spec/cloudify/3.2m8/types.yaml
+    - http://www.getcloudify.org/spec/softlayer-plugin/1.2m8/plugin.yaml
+
+inputs:
+
+  username:
+    default: ''
+
+  api_key:
+    default: ''
+
+  endpoint_url:
+    default: ''
+
+  location:
+    default: 352494
+
+  domain:
+    default: cloudify.org
+
+  hostname:
+    default: windows
+
+  ram:
+    default: 864
+
+  cpu:
+    default: 859
+
+  disk:
+    default: 1178
+
+  os:
+    default: 4248
+
+  image_template_id:
+    default: ''
+
+  private_network_only:
+    type: boolean
+    default: false
+
+  port_speed:
+    type: integer
+    default: 187
+
+  private_vlan:
+    type: integer
+    default: ''
+
+  public_vlan:
+    type: integer
+    default: ''
+
+  provision_scripts:
+    default: ['https://raw.githubusercontent.com/cloudify-cosmo/cloudify-softlayer-plugin/master/softlayer_plugin/scripts/postprov.cmd']
+
+  additional_ids:
+    default: []
+
+  install_agent:
+    default: true
+
+node_templates:
+  # defining a single node template that will serve as our test node
+  testhost:
+    type: cloudify.softlayer.nodes.WindowsVirtualServer
+    properties:
+      api_config: { get_property: [softlayer_configuration, api_config] }
+      location: { get_input: location }
+      domain: { get_input: domain }
+      hostname: {get_input: hostname}
+      ram: { get_input: ram }
+      cpu: { get_input: cpu }
+      disk: { get_input: disk }
+      os: { get_input: os }
+      image_template_id: { get_input: image_template_id }
+      private_network_only: { get_input: private_network_only }
+      port_speed: { get_input: port_speed }
+      private_vlan: { get_input: private_vlan }
+      public_vlan: { get_input: public_vlan }
+      provision_scripts: { get_input: provision_scripts }
+      additional_ids: { get_input: additional_ids }
+      install_agent: { get_input: install_agent }
+
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        start:
+          inputs:
+            retry_interval_secs: 30
+
+  softlayer_configuration:
+    type: softlayer_configuration
+    properties:
+      api_config:
+        username: { get_input: username }
+        api_key: { get_input: api_key }
+        endpoint_url: { get_input: endpoint_url }

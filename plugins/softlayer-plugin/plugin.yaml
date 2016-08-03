@@ -1,0 +1,221 @@
+##################################################################################
+# Cloudify SoftLayer built in types and plugins definitions.
+##################################################################################
+
+plugins:
+    softlayer:
+        executor: central_deployment_agent
+        source: softlayer-plugin
+
+node_types:
+  cloudify.softlayer.nodes.VirtualServer:
+    derived_from: cloudify.nodes.Compute
+    properties:
+      # SoftLayer API: username and api_key
+      api_config:
+        description: The softlayer configurations
+        default: {}
+      # mandatory properties
+      location:
+        description: The location string (data center)
+        type: string
+      domain:
+        description: The domain of the server
+        type: string
+      ram:
+        description: The item id of the RAM to order
+        type: integer
+        # e.g. item id 864 for 8 GB
+      cpu:
+        description: The item id of the CPU
+        type: integer
+        # e.g. item id 859 for 4 x 2.0 GHz Cores
+      disk:
+        description: The item id of the first disk to add
+        type: integer
+        # e.g. item id 1178 for 25 GB (SAN)
+      os:
+        description: The item id of the operating system to use
+        type: integer
+        # e.g. item id 1857 for Windows Server 2008 R2 Standard Edition (64bit)
+
+      # optional properties
+      hostname:
+        description: The hostname of the server
+        default: ''
+        type: string
+      image_template_id:
+        description: The image template identifier
+        default: ''
+        type: string
+      image_template_global_id:
+        description: The image template global identifier
+        default: ''
+        type: string
+      quantity:
+        description: The amount of servers to order
+        default: 1
+        type: integer
+      use_hourly_pricing:
+        description: >
+          Flag to indicate if this server
+          should be billed hourly (default) or monthly
+        default: true
+      private_network_only:
+        description: >
+          Flag to indicate whether the computing instance
+          only has access to the private network
+        default: false
+      port_speed:
+        description: The item id of the port speed
+        type: integer
+        default: 187 # 100_MBPS_PUBLIC_PRIVATE_NETWORK_UPLINKS
+      private_vlan:
+        description: The internal identifier of the private VLAN
+        default: ''
+      public_vlan:
+        description: The internal identifier of the public VLAN
+        default: ''
+      bandwidth:
+        description: The item id of the bandwidth
+        default: 439 # 0 GB Bandwidth
+        type: integer
+      pri_ip_addresses:
+        description: The item id of Primary IP Addresses
+        default: 15 # 1 IP Address
+        type: integer
+      monitoring:
+        description: The item id of the monitoring
+        default: 49 # Host Ping
+        type: integer
+      notification:
+        description: The item id of the notification
+        default: 51 # Email and Ticket
+        type: integer
+      response:
+        description: The item id of the response
+        default: 52 # Automated Notification
+        type: integer
+      remote_management:
+        description: The item id of the remote management
+        default: 503 # Reboot / Remote Console
+        type: integer
+      vulnerability_scanner:
+        description: The item id of the vulnerability scanner
+        default: 307 # Nessus Vulnerability Assessment & Reporting
+        type: integer
+      vpn_management:
+        description: The item id of the VPN management
+        default: 309 # Unlimited SSL VPN Users & 1 PPTP VPN User per account
+        type: integer
+      provision_scripts:
+        description: >
+          A list of the URIs of the post-install scripts
+          to run after reload
+          Each URI should start with https
+        default: []
+      additional_ids:
+        description: Additional item ids
+        default: []
+      ssh_keys:
+        description: The SSH keys to add to the root user
+        default: []
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create:
+          implementation: softlayer.softlayer_plugin.server.create
+          inputs:
+            retry_interval_secs:
+              description: the interval in seconds between consecutive retries until transactions start.
+              default: 10
+              type: integer
+        start:
+          implementation: softlayer.softlayer_plugin.server.start
+          inputs:
+            retry_interval_secs:
+              description: the interval in seconds between consecutive retries in case there are active transactions and until the transactions end.
+              default: 10
+              type: integer
+        stop:
+          implementation: softlayer.softlayer_plugin.server.stop
+          inputs:
+            retry_interval_secs:
+              description: the interval in seconds between consecutive retries in case there are active transactions and until the transactions end.
+              default: 10
+              type: integer
+        delete:
+          implementation: softlayer.softlayer_plugin.server.delete
+          inputs:
+            retry_interval_secs:
+              description: the interval in seconds between consecutive retries until transactions start
+              default: 10
+              type: integer
+      cloudify.interfaces.validation:
+        creation:
+          implementation: softlayer.softlayer_plugin.server.creation_validation
+      custom:
+        os_reload:
+          implementation: softlayer.softlayer_plugin.server.os_reload
+          inputs:
+            post_uri:
+              default: {get_property: [SELF, provision_scripts]}
+            ssh_keys:
+              default: { get_property: [SELF, ssh_keys] }
+
+  cloudify.softlayer.nodes.WindowsVirtualServer:
+    derived_from: cloudify.softlayer.nodes.VirtualServer
+    interfaces:
+      cloudify.interfaces.worker_installer:
+        install:
+          implementation: windows_agent_installer.windows_agent_installer.tasks.install
+          inputs:
+            cloudify_agent:
+              default:
+                user: { get_attribute: [SELF, username] }
+                password: { get_attribute: [SELF, password] }
+        start:
+          implementation: windows_agent_installer.windows_agent_installer.tasks.start
+          inputs:
+            cloudify_agent:
+              default:
+                user: { get_attribute: [SELF, username] }
+                password: { get_attribute: [SELF, password] }
+        stop:
+          implementation: windows_agent_installer.windows_agent_installer.tasks.stop
+          inputs:
+            cloudify_agent:
+              default:
+                user: { get_attribute: [SELF, username] }
+                password: { get_attribute: [SELF, password] }
+        uninstall:
+          implementation: windows_agent_installer.windows_agent_installer.tasks.uninstall
+          inputs:
+            cloudify_agent:
+              default:
+                user: { get_attribute: [SELF, username] }
+                password: { get_attribute: [SELF, password] }
+        restart:
+          implementation: windows_agent_installer.windows_agent_installer.tasks.restart
+          inputs:
+            cloudify_agent:
+              default:
+                user: { get_attribute: [SELF, username] }
+                password: { get_attribute: [SELF, password] }
+      cloudify.interfaces.plugin_installer:
+        install:
+          implementation: windows_plugin_installer.windows_plugin_installer.tasks.install
+          inputs:
+            cloudify_agent:
+              default:
+                user: { get_attribute: [SELF, username] }
+                password: { get_attribute: [SELF, password] }
+
+  softlayer_configuration:
+    derived_from: cloudify.nodes.Root
+    properties:
+      api_config:
+        description: The API configurations
+        default:
+          username: ''
+          api_key: ''
+          endpoint_url: ''
