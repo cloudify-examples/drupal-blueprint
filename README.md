@@ -7,7 +7,6 @@ E.G :  Apply patches, invoke security updates etc. <br>
 
 
 * Prerequisites
-
 ** An Ubuntu 14.04 image id from your OpenStack account and from your vSphere account <br>
 ** An flavor image id of your choice from your OpenStack account <br>
 
