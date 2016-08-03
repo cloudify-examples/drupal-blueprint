@@ -1,16 +1,15 @@
 # drupal-blueprint
 A Drupal blueprint for OpenStack and Hybrid Cloud (OpenStack and vSphere)
 
-This blueprint enables ypu to deploy, configure, monitor, heal and scale a Drupal 7 on OpenStack and on Hybrid Cloud (OpenStack and vSphere).
-Once installed, Cloudify enables you to perform Day-2 operations on your live environments.
-It contains healing and scaling groups, thus your can
-E.G :  Apply patches, invoke security updates etc.
+This blueprint enables ypu to deploy, configure, monitor, heal and scale a Drupal 7 on OpenStack and on Hybrid Cloud (OpenStack and vSphere). <br>
+Once installed, Cloudify enables you to perform Day-2 operations on your live environments. <br>
+E.G :  Apply patches, invoke security updates etc. <br>
 
 
 * Prerequisites
 
-** An Ubuntu 14.04 image id from your OpenStack account and from your vSphere account
-** An flavor image id of your choice from your OpenStack account
+** An Ubuntu 14.04 image id from your OpenStack account and from your vSphere account <br>
+** An flavor image id of your choice from your OpenStack account <br>
 
 * Tested Version (Most recent Cloudify version must be among them.)
 
@@ -18,7 +17,7 @@ This blueprint has been test with Cloudify version 3.4.0
 
 * Complete install and uninstall instructions
 
-All you need to do is to set/specify (as an input to the blueprint) the OpenStack image id for Ubuntu 14.04 and the OpenStack flavor Id.
+All you need to do is to set/specify (as an input to the blueprint) the OpenStack image id for Ubuntu 14.04 and the OpenStack flavor Id. <br>
 If you use the Hybrid version, you need to set/specify (as an input to the blueprint) the vsphere_template_name for Ubuntu 14.04.
 
 
@@ -29,7 +28,7 @@ If you use the Hybrid version, you need to set/specify (as an input to the bluep
 
 `cfy install upload -b <choose_blueprint_id> -p <blueprint_filename>` <br>
 
-If you have or want to use an inputs file :
+If you have or want to use an inputs file : <br>
 `cfy install upload -b <choose_blueprint_id> -p <blueprint_filename> -i <your_inputs_file>` <br>
 
 This process will create all the cloud resources needed for the application and the application itself ...: <br>
@@ -50,13 +49,14 @@ Hit that URL to see the application running.
 
 ### Step 3: Demo the Day-2 Operation.
 
-The following will change the theme of the Drupal site.
+The following will change the theme of the Drupal site. <br>
 It can be invoked from the Cloudify manager UI as well...
 
-Here are instructions to run it from the Cloudify CLI:
+Here are instructions to run it from the Cloudify CLI: <br>
+
 *export dep=<deployment_id>*
 *export myTheme=mayo*
-cfy executions start -d $dep  -w drush_install -p "project_name=${myTheme}"
+*cfy executions start -d $dep  -w drush_install -p "project_name=${myTheme}"*
 
 This is how you invoke it from the drush_setvar workflow from the CFY CLI :
 
