@@ -11,9 +11,9 @@ E.G :  Apply patches, invoke security updates etc. <br>
 - An Ubuntu 14.04 image id from your OpenStack account and from your vSphere account <br>
 - An flavor image id of your choice from your OpenStack account <br>
 
-# Tested Version (Most recent Cloudify version must be among them.)
+# Tested Version
 
-This blueprint has been test with Cloudify version 3.4.0
+This blueprint has been test with Cloudify version 3.4.0 and with Drupal 7.
 
 # Usage
 
