@@ -1,5 +1,5 @@
 # drupal-blueprint
-A Drupal blueprint for OpenStack and Hybrid Cloud (OpenStack and vSphere)
+A Drupal (LAMP CMS) blueprint for OpenStack and Hybrid Cloud (OpenStack and vSphere)
 
 This blueprint enables ypu to deploy, configure, monitor, heal and scale a Drupal 7 on OpenStack and on Hybrid Cloud (OpenStack and vSphere). <br>
 Once installed, Cloudify enables you to perform Day-2 operations on your live environments. <br>
