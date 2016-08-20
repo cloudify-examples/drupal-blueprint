@@ -81,3 +81,5 @@ as well as delete all related resources. <br>
 
 `cfy uninstall -d <deployment_id>`
 
+### For more info, you can Watch [this video](https://www.youtube.com/watch?v=GaUMZKtS8ws)
+
