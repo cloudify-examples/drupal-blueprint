@@ -1,3 +1,5 @@
+[![Build Status](https://circleci.com/gh/cloudify-examples/drupal-blueprint.svg?style=shield&circle-token=:circle-token)](https://circleci.com/gh/cloudify-examples/drupal-blueprint)
+
 # drupal-blueprint
 A Drupal (LAMP CMS) blueprint for OpenStack and Hybrid Cloud (OpenStack and vSphere)
 
