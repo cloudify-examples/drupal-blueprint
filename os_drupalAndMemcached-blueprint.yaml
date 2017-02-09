@@ -3,11 +3,65 @@ tosca_definitions_version: cloudify_dsl_1_3
 imports:
   - http://www.getcloudify.org/spec/cloudify/3.4/types.yaml
   - http://www.getcloudify.org/spec/diamond-plugin/1.3.3/plugin.yaml
-  - http://www.getcloudify.org/spec/openstack-plugin/1.4/plugin.yaml
+  - http://www.getcloudify.org/spec/openstack-plugin/2.0/plugin.yaml
   - scale.yaml
 
 
 inputs:
+
+
+  keystone_username:
+    default: ''
+    type: string
+
+  keystone_password:
+    default: ''
+    type: string
+
+  keystone_tenant_name:
+    default: ''
+    type: string
+
+  keystone_url:
+    default: ''
+    type: string
+
+  region:
+    default: ''
+    type: string
+
+  openstack_config:
+    default:
+      username: { get_input: keystone_username }
+      password: { get_input: keystone_password }
+      tenant_name: { get_input: keystone_tenant_name }
+      auth_url: { get_input: keystone_url }
+      region: { get_input: region }
+
+  key_name:
+    default: drupal-example
+
+  private_key_path:
+    default: ~/.ssh/drupal-example.pem
+
+  external_network_name:
+    default: external
+
+  router_name:
+    description: The Router Name
+
+  public_network_name:
+    description: The name of the Openstack public network.
+
+  private_network_name:
+    description: The name of the Openstack private network.
+
+  public_subnet_name:
+    description: The name of the public network subnet.
+
+  private_subnet_name:
+    description: The name of the private network subnet.
+
   docRoot:
     default: /var/www/html
   dbPort:
@@ -33,13 +87,20 @@ node_types:
   host:
     derived_from: cloudify.openstack.nodes.Server
     properties:
-      cloudify_agent:
+      openstack_config:
+        default: { get_input: openstack_config }
+      agent_config:
         default:
           user: { get_input: agent_user }
+          install_method: remote
+          port: 22
+          key: { get_property: [ key, private_key_path ] }
       server:
         default:
           image: { get_input: vm_image }
           flavor: { get_input: vm_flavor }
+      management_network_name:
+        default: { get_property: [ public_network, resource_id ] }
     interfaces:
       utils.ops:
         restart_vm_op: utils-scripts/restart_vm.sh
@@ -173,8 +234,6 @@ node_types:
         description: docRoot of the Drupal
         type: string
 
-
-
 relationships:
   drupal_server_connected_to_mysql_database:
     derived_from: cloudify.relationships.connected_to
@@ -193,12 +252,12 @@ relationships:
       cloudify.interfaces.relationship_lifecycle:
         establish: drupal-scripts/configure-memcached-drupal.sh
 
-
 node_templates:
 
   drupal_security_group:
     type: cloudify.openstack.nodes.SecurityGroup
     properties:
+      openstack_config: { get_input: openstack_config }
       rules:
         - remote_ip_prefix: 0.0.0.0/0
           port: 8080
@@ -229,22 +288,37 @@ node_templates:
       scalable:
         properties:
           default_instances: 1
+    properties:
+      openstack_config: { get_input: openstack_config }
+      floatingip:
+        floating_network_name: { get_property: [ external_network, resource_id ] }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: public_network
 
   mysql_vm:
     type: host
     instances:
       deploy: 1
+    properties:
+      management_network_name: { get_property: [ private_network, resource_id ] }
     relationships:
-      - target: drupal_security_group
-        type: cloudify.openstack.server_connected_to_security_group
+      - target: mysql_vm_port
+        type: cloudify.openstack.server_connected_to_port
+      - type: cloudify.openstack.server_connected_to_keypair
+        target: key
 
   memcached_vm:
     type: host
     instances:
       deploy: 1
+    properties:
+      management_network_name: { get_property: [ private_network, resource_id ] }
     relationships:
-      - target: drupal_security_group
-        type: cloudify.openstack.server_connected_to_security_group
+      - target: memcached_vm_port
+        type: cloudify.openstack.server_connected_to_port
+      - type: cloudify.openstack.server_connected_to_keypair
+        target: key
 
   apache_vm:
     type: host
@@ -253,10 +327,48 @@ node_templates:
         properties:
           default_instances: 1
     relationships:
-      - target: drupal_security_group
-        type: cloudify.openstack.server_connected_to_security_group
-      - target: apache_ip
-        type: cloudify.openstack.server_connected_to_floating_ip
+      - target: apache_vm_port
+        type: cloudify.openstack.server_connected_to_port
+      - type: cloudify.openstack.server_connected_to_keypair
+        target: key
+
+  mysql_vm_port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: { get_input: openstack_config }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: private_network
+      - type: cloudify.relationships.depends_on
+        target: private_subnet
+      - type: cloudify.openstack.port_connected_to_security_group
+        target: drupal_security_group
+
+  memcached_vm_port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: { get_input: openstack_config }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: private_network
+      - type: cloudify.relationships.depends_on
+        target: private_subnet
+      - type: cloudify.openstack.port_connected_to_security_group
+        target: drupal_security_group
+
+  apache_vm_port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: { get_input: openstack_config }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: public_network
+      - type: cloudify.relationships.depends_on
+        target: public_subnet
+      - type: cloudify.openstack.port_connected_to_security_group
+        target: drupal_security_group
+      - type: cloudify.openstack.port_connected_to_floating_ip
+        target: apache_ip
 
   mysql_database:
     type: mysql_dbms
@@ -366,34 +478,93 @@ node_templates:
       - type: drupal_app_connected_to_mysql_drupal_schema
         target: mysql_drupal_schema
 
+  private_subnet:
+    type: cloudify.openstack.nodes.Subnet
+    properties:
+      openstack_config: { get_input: openstack_config }
+      use_external_resource: true
+      resource_id: { get_input: private_subnet_name }
+    relationships:
+      - target: private_network
+        type: cloudify.relationships.contained_in
+
+  private_network:
+    type: cloudify.openstack.nodes.Network
+    properties:
+      openstack_config: { get_input: openstack_config }
+      use_external_resource: true
+      resource_id: { get_input: private_network_name }
+
+  public_subnet:
+    type: cloudify.openstack.nodes.Subnet
+    properties:
+      openstack_config: { get_input: openstack_config }
+      use_external_resource: true
+      resource_id: { get_input: public_subnet_name }
+    relationships:
+      - target: public_network
+        type: cloudify.relationships.contained_in
+      - target: router
+        type: cloudify.openstack.subnet_connected_to_router
+
+  public_network:
+    type: cloudify.openstack.nodes.Network
+    properties:
+      openstack_config: { get_input: openstack_config }
+      use_external_resource: true
+      resource_id: { get_input: public_network_name }
+
+  router:
+    type: cloudify.openstack.nodes.Router
+    properties:
+      openstack_config: { get_input: openstack_config }
+      use_external_resource: true
+      resource_id: { get_input: router_name }
+    relationships:
+      - target: external_network
+        type: cloudify.relationships.connected_to
+
+  external_network:
+    type: cloudify.openstack.nodes.Network
+    properties:
+      openstack_config: { get_input: openstack_config }
+      use_external_resource: true
+      resource_id: { get_input: external_network_name }
+
+  key:
+    type: cloudify.openstack.nodes.KeyPair
+    properties:
+      openstack_config: { get_input: openstack_config }
+      resource_id: { get_input: key_name }
+      private_key_path: { get_input: private_key_path }
 
 plugins:
-   drush-plugin:
-      executor: central_deployment_agent
-      source: drush-plugin
+  drush-plugin:
+    executor: central_deployment_agent
+    source: drush-plugin
 
-   utils-plugin:
-      executor: central_deployment_agent
-      source: utils-plugin
+  utils-plugin:
+    executor: central_deployment_agent
+    source: utils-plugin
 
 
 workflows:
-   restart_vms:
-      mapping: utils-plugin.vms.tasks.restart_vms
-      parameters:
-        node_id:
-          description: The node id whose instance will be restarted
-        node_instance_id:
-          description: The node instance id which will be restarted - default(null) = All instances...
-          default: null
-        my_input:
-          description: Additional input
-          default: null
+  restart_vms:
+    mapping: utils-plugin.vms.tasks.restart_vms
+    parameters:
+      node_id:
+        description: The node id whose instance will be restarted
+      node_instance_id:
+        description: The node instance id which will be restarted - default(null) = All instances...
+        default: null
+      my_input:
+        description: Additional input
+        default: null
 
-   drush_install:
-      mapping: drush-plugin.drush.tasks.install_project
-      parameters:
-         project_name: {}
+  drush_install:
+    mapping: drush-plugin.drush.tasks.install_project
+    parameters:
+      project_name: {}
    
    # See Built-in Workflows in http://getcloudify.org/guide/3.3.1/guide-workflows.html#built-in-workflows
 #   drushinstall:
@@ -403,17 +574,17 @@ workflows:
 #         node_ids:
 #           - drupal_app
 
-   drush_setvar:
-      mapping: drush-plugin.drush.tasks.set_variable
-      parameters:
-         variable_name:
-           default: theme_default
-         variable_value: {}
+  drush_setvar:
+    mapping: drush-plugin.drush.tasks.set_variable
+    parameters:
+      variable_name:
+        default: theme_default
+      variable_value: {}
 
 # Syntax without parameters
 # drush_dl: drush-plugin.drush.tasks.drush_download_module
 # drush_en: drush-plugin.drush.tasks.drush_enable_module
-  
+
 outputs:
   endpoint:
     description: My application endpoint
@@ -494,12 +665,12 @@ groups:
                 diagnose_value: { 'get_property': [ SELF, diagnose ] }
 
   apache:
-    members: [apache_vm, apache_ip]
+    members: [apache_vm, apache_vm_port]
 
 
-policies:
-  scale_policy1:
-    type: cloudify.policies.scaling
-    properties:
-      default_instances: 1
-    targets: [apache]
+#policies:
+#  scale_policy1:
+#    type: cloudify.policies.scaling
+#    properties:
+#      default_instances: 1
+#    targets: [apache]
