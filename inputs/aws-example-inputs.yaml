@@ -1,14 +1,5 @@
-docRoot: /var/www/html
-dbPort: 3306
-dbBindAddress: '0.0.0.0'
-memcachePort: 11211
-agent_user: 'ubuntu'
-agent_private_key_path: '~/.ssh/agent_key.pem'
-image_id: 'ami-c93a83de'
-instance_type: 'm3.large'
-ec2_region_name: 'us-east-1'
-aws_access_key_id: ''	# input your credentials here
-aws_secret_access_key: ''	# input your credentials here
-drupal_security_group_name: 'Drupal_AWS_Security_Group'
-schemaurl: 'http://repository.cloudifysource.org/org/cloudifysource/examples/drupal/new_babies7.zip'
-drupalImageURL: 'http://repository.cloudifysource.org/org/cloudifysource/examples/drupal/babies_image_d7_v2.zip'
+aws_secret_access_key: ''
+aws_access_key_id: ''
+vpc_id: ''
+public_subnet_id: ''
+private_subnet_id: ''

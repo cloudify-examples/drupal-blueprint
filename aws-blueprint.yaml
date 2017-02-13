@@ -2,56 +2,104 @@ tosca_definitions_version: cloudify_dsl_1_3
 
 imports:
   - http://www.getcloudify.org/spec/cloudify/3.4/types.yaml
-  - http://www.getcloudify.org/spec/diamond-plugin/1.3.3/plugin.yaml
-  - http://www.getcloudify.org/spec/aws-plugin/1.4.1/plugin.yaml
+  - http://www.getcloudify.org/spec/diamond-plugin/1.3.5/plugin.yaml
+  - http://www.getcloudify.org/spec/aws-plugin/1.4.3/plugin.yaml
   - scale.yaml
 
 
 inputs:
-  docRoot:
+
+  aws_access_key_id:
+    description: YOUR AWS ACCESS KEY ID
+
+  aws_secret_access_key:
+    description: YOUR AWS SECRET ACCESS KEY
+
+  ec2_region_name:
+    default: us-east-1
+
+  ec2_region_endpoint:
+    default: ec2.us-east-1.amazonaws.com
+
+  availability_zone:
+    default: us-east-1e
+
+  aws_config:
+    default:
+      aws_access_key_id: { get_input: aws_access_key_id }
+      aws_secret_access_key: { get_input: aws_secret_access_key }
+      ec2_region_name: { get_input: ec2_region_name }
+      ec2_region_endpoint: { get_input: ec2_region_endpoint }
+
+  vpc_id:
+    description: Your AWS Managers VPC.
+
+  vpc_cidr_block:
+    default: 172.16.0.0/16
+
+  public_subnet_id:
+    description: The public subnet in your VPC.
+
+  public_subnet_cidr:
+    default: 172.16.122.0/24
+
+  public_subnet_availability_zone:
+    default: { get_input: availability_zone }
+
+  private_subnet_id:
+    description: The private subnet in your VPC.
+
+  private_subnet_cidr:
+    default: 172.16.123.0/24
+
+  private_subnet_availability_zone:
+    default: { get_input: availability_zone }
+
+  key_name:
+    default: drupal
+
+  agent_private_key_path:
     type: string
-    default: ''
-  dbPort:
-    type: string
-    default: ''
-  dbBindAddress: 
-    type: string
-    default: ''
-  memcachePort:
-    type: string
-    default: ''
+    default: '~/.ssh/drupal.pem'
+
   agent_user:
+    description: >
+      The username of the agent running on the instance created from the image.
+    default: 'ubuntu'
+
+  docRoot:
+    default: /var/www/html
+  dbPort:
+    default: 3306
+
+  dbBindAddress:
     type: string
-    default: ''
-  agent_private_key_path: 
-    type: string
-    default: ''
+    default: '0.0.0.0'
+
+  memcachePort:
+    default: 11211
+
 # Ubuntu 14.04
   image_id:
     type: string
-    default: ''
+    default: 'ami-c93a83de'
+
 # RAM: 4096 MB, Hard Disk 80 GB, 2 vCPUs
   instance_type:
     type: string
-    default: ''
-  ec2_region_name:
-    type: string
-    default: ''
-  aws_access_key_id:
-    type: string
-    default: ''
-  aws_secret_access_key: 
-    type: string
-    default: ''
+    default: 'm3.large'
+
   drupal_security_group_name:
     type: string
-    default: ''
+    default: 'Drupal_AWS_Security_Group'
+
   schemaurl:
     type: string
-    default: ''
+    default: 'http://repository.cloudifysource.org/org/cloudifysource/examples/drupal/new_babies7.zip'
+
   drupalImageURL:
     type:
-    default: ''
+    default: 'http://repository.cloudifysource.org/org/cloudifysource/examples/drupal/babies_image_d7_v2.zip'
 
 node_types:
 
@@ -63,14 +111,21 @@ node_types:
   host:
     derived_from: cloudify.aws.nodes.Instance
     properties:
-      cloudify_agent:
-        default: 
-          user: { get_input: agent_user } 
-          key:  { get_input: agent_private_key_path }
-      image_id: 
+      aws_config:
+        default: { get_input: aws_config }
+      image_id:
         default: { get_input: image_id }
       instance_type: 
-        default: { get_input: instance_type }        
+        default: { get_input: instance_type }
+      parameters:
+        default:
+          placement: { get_property: [ private_subnet, availability_zone ] }
+      agent_config:
+        default:
+          install_method: remote
+          port: 22
+          user: { get_input: agent_user }
+          key:  { get_input: agent_private_key_path }
     interfaces:
       utils.ops:
         restart_vm_op: utils-scripts/restart_vm.sh
@@ -230,10 +285,7 @@ node_templates:
   drupal_security_group:
     type: cloudify.aws.nodes.SecurityGroup
     properties:
-      aws_config: &aws_configuration
-        aws_access_key_id: { get_input: aws_access_key_id }
-        aws_secret_access_key: { get_input: aws_secret_access_key }
-        ec2_region_name: { get_input: ec2_region_name }
+      aws_config: { get_input: aws_config }
       resource_id: { get_input: drupal_security_group_name }
       description: Security group for Cloudify Manager VM
       rules:
@@ -281,53 +333,57 @@ node_templates:
           cidr_ip: 0.0.0.0/0
           from_port: 8100
           to_port: 8100
+    relationships:
+      - type: cloudify.aws.relationships.security_group_contained_in_vpc
+        target: vpc
 
   apache_ip:
     type: cloudify.aws.nodes.ElasticIP
-    properties: 
-      aws_config: *aws_configuration
+    properties:
+      aws_config: { get_input: aws_config }
+      domain: vpc
     capabilities:
       scalable:
         properties:
           default_instances: 1
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: vpc
 
   mysql_vm:
     type: host
-    properties:
-      image_id: { get_input: image_id }
-      instance_type: { get_input: instance_type }
-      aws_config: *aws_configuration 
-    instances:
-      deploy: 1
     relationships:
-      - target: drupal_security_group
-        type: cloudify.aws.relationships.instance_connected_to_security_group
+      - type: cloudify.aws.relationships.instance_connected_to_security_group
+        target: drupal_security_group
+      - type: cloudify.aws.relationships.instance_connected_to_subnet
+        target: private_subnet
+      - type: cloudify.aws.relationships.instance_connected_to_keypair
+        target: key
 
   memcached_vm:
     type: host
-    properties:
-      image_id: { get_input: image_id }
-      instance_type: { get_input: instance_type }
-      aws_config: *aws_configuration  
-    instances:
-      deploy: 1
     relationships:
-      - target: drupal_security_group
-        type: cloudify.aws.relationships.instance_connected_to_security_group
+      - type: cloudify.aws.relationships.instance_connected_to_security_group
+        target: drupal_security_group
+      - type: cloudify.aws.relationships.instance_connected_to_subnet
+        target: private_subnet
+      - type: cloudify.aws.relationships.instance_connected_to_keypair
+        target: key
 
   apache_vm:
     type: host
     properties:
-      image_id: { get_input: image_id }
-      instance_type: { get_input: instance_type }
-      aws_config: *aws_configuration  
-    capabilities:
-      scalable:
-        properties:
-          default_instances: 1
+      parameters:
+          placement: { get_property: [ public_subnet, availability_zone ] }
     relationships:
-      - target: drupal_security_group
-        type: cloudify.aws.relationships.instance_connected_to_security_group
+      - type: cloudify.relationships.contained_in
+        target: vpc
+      - type: cloudify.aws.relationships.instance_connected_to_security_group
+        target: drupal_security_group
+      - type: cloudify.aws.relationships.instance_connected_to_subnet
+        target: public_subnet
+      - type: cloudify.aws.relationships.instance_connected_to_keypair
+        target: key
       - target: apache_ip
         type: cloudify.aws.relationships.instance_connected_to_elastic_ip
 
@@ -439,8 +495,47 @@ node_templates:
       - type: drupal_app_connected_to_mysql_drupal_schema
         target: mysql_drupal_schema
 
+  public_subnet:
+    type: cloudify.aws.nodes.Subnet
+    properties:
+      aws_config: { get_input: aws_config }
+      use_external_resource: true
+      resource_id: { get_input: public_subnet_id }
+      cidr_block: { get_input: public_subnet_cidr }
+      availability_zone: { get_input: public_subnet_availability_zone }
+    relationships:
+      - type: cloudify.aws.relationships.subnet_contained_in_vpc
+        target: vpc
+
+  private_subnet:
+    type: cloudify.aws.nodes.Subnet
+    properties:
+      aws_config: { get_input: aws_config }
+      use_external_resource: true
+      resource_id: { get_input: private_subnet_id }
+      cidr_block: { get_input: private_subnet_cidr }
+      availability_zone: { get_input: private_subnet_availability_zone }
+    relationships:
+      - type: cloudify.aws.relationships.subnet_contained_in_vpc
+        target: vpc
+
+  vpc:
+    type: cloudify.aws.nodes.VPC
+    properties:
+      aws_config: { get_input: aws_config }
+      use_external_resource: true
+      resource_id: { get_input: vpc_id }
+      cidr_block: { get_input: vpc_cidr_block }
+
+  key:
+    type: cloudify.aws.nodes.KeyPair
+    properties:
+      aws_config: { get_input: aws_config }
+      resource_id: { get_input: key_name }
+      private_key_path: { get_input: agent_private_key_path }
 
 plugins:
+
    drush-plugin:
       executor: central_deployment_agent
       source: drush-plugin
@@ -449,8 +544,8 @@ plugins:
       executor: central_deployment_agent
       source: utils-plugin
 
-
 workflows:
+
    restart_vms:
       mapping: utils-plugin.vms.tasks.restart_vms
       parameters:
@@ -488,6 +583,7 @@ workflows:
 # drush_en: drush-plugin.drush.tasks.drush_enable_module
   
 outputs:
+
   endpoint:
     description: My application endpoint
     value:
@@ -523,7 +619,7 @@ groups:
               workflow: scale
               workflow_parameters:
                 delta: 1
-                node_id: apache
+                scalable_entity_name: apache
                 # scale_compute: true
 
   scale_down_group:
@@ -545,7 +641,7 @@ groups:
               workflow: scale
               workflow_parameters:
                 delta: -1
-                node_id: apache
+                scalable_entity_name: apache
                 # scale_compute: true
 
   heal_group:
@@ -568,7 +664,6 @@ groups:
 
   apache:
     members: [apache_vm, apache_ip]
-
 
 policies:
   scale_policy1:
