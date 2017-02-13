@@ -22,7 +22,7 @@ dependencies:
 test:
   override:
     - cfy init
-    - cfy blueprints validate os_drupalAndMemcached-blueprint.yaml
+    - cfy blueprints validate openstack-blueprint.yaml
     - cfy blueprints validate os_vs_drupalAndMemcached-blueprint.yaml
 
 deployment:
