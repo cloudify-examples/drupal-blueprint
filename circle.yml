@@ -23,6 +23,7 @@ test:
   override:
     - cfy init
     - cfy blueprints validate aws-blueprint.yaml
+    - cfy blueprints validate azure-blueprint.yaml
     - cfy blueprints validate openstack-blueprint.yaml
     - cfy blueprints validate os_vs_drupalAndMemcached-blueprint.yaml
 
