@@ -25,10 +25,7 @@ If you use the Hybrid version, you need to set/specify (as an input to the bluep
 
 ### Step 1: Installation
 
-`cfy install upload -b <choose_blueprint_id> -p <blueprint_filename>` <br>
-
-If you have or want to use an inputs file : <br>
-`cfy install upload -b <choose_blueprint_id> -p <blueprint_filename> -i <your_inputs_file>` <br>
+`cfy install <blueprint_filename> -i <your_inputs_file> -b drupal` <br>
 
 This process will create all the cloud resources needed for the application and the application itself ...: <br>
 
@@ -81,7 +78,7 @@ You can simulate a failed host by stopping or suspending a running memcacheD VM.
 Now lets run the `uninstall` workflow. This will uninstall the application,
 as well as delete all related resources. <br>
 
-`cfy uninstall -d <deployment_id>`
+`cfy uninstall drupal`
 
 ### For more info, you can Watch [this video](https://www.youtube.com/watch?v=GaUMZKtS8ws)
 
