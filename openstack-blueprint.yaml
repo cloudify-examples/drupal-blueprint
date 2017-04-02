@@ -1,42 +1,26 @@
 tosca_definitions_version: cloudify_dsl_1_3
 
 imports:
-  - http://www.getcloudify.org/spec/cloudify/3.4/types.yaml
-  - http://www.getcloudify.org/spec/diamond-plugin/1.3.3/plugin.yaml
-  - http://www.getcloudify.org/spec/openstack-plugin/2.0/plugin.yaml
+  - http://www.getcloudify.org/spec/cloudify/4.0/types.yaml
+  - http://www.getcloudify.org/spec/diamond-plugin/1.3.5/plugin.yaml
+  - http://www.getcloudify.org/spec/openstack-plugin/2.0.1/plugin.yaml
   - scale.yaml
 
 
 inputs:
 
+  image:
+    description: image
 
-  keystone_username:
-    default: ''
-    type: string
+  flavor:
+    description: flavor
 
-  keystone_password:
-    default: ''
-    type: string
-
-  keystone_tenant_name:
-    default: ''
-    type: string
-
-  keystone_url:
-    default: ''
-    type: string
+  agent_user:
+    description: user for agents
 
   region:
     default: ''
     type: string
-
-  openstack_config:
-    default:
-      username: { get_input: keystone_username }
-      password: { get_input: keystone_password }
-      tenant_name: { get_input: keystone_tenant_name }
-      auth_url: { get_input: keystone_url }
-      region: { get_input: region }
 
   key_name:
     default: drupal-example
@@ -64,18 +48,21 @@ inputs:
 
   docRoot:
     default: /var/www/html
+
   dbPort:
     default: 3306
+
   memcachePort:
     default: 11211
-  agent_user:
-    default: 'ubuntu'
-# Ubuntu 14.04
-  vm_image:
-    default: '6c3047c6-17b1-4aaf-a657-9229bb481e50'
-# RAM: 4096 MB, Hard Disk 80 GB, 2 vCPUs
-  vm_flavor:
-    default: '8f4b7ae1-b8c2-431f-bb0c-362a5ece0381'
+
+dsl_definitions:
+
+  openstack_config: &openstack_config
+    username: { get_secret: keystone_username }
+    password: { get_secret: keystone_password }
+    tenant_name: { get_secret: keystone_tenant_name }
+    auth_url: { get_secret: keystone_url }
+    region: { get_input: region }
 
 node_types:
 
@@ -87,8 +74,6 @@ node_types:
   host:
     derived_from: cloudify.openstack.nodes.Server
     properties:
-      openstack_config:
-        default: { get_input: openstack_config }
       agent_config:
         default:
           user: { get_input: agent_user }
@@ -97,8 +82,8 @@ node_types:
           key: { get_property: [ key, private_key_path ] }
       server:
         default:
-          image: { get_input: vm_image }
-          flavor: { get_input: vm_flavor }
+          image: { get_input: image }
+          flavor: { get_input: flavor }
       management_network_name:
         default: { get_property: [ public_network, resource_id ] }
     interfaces:
@@ -257,7 +242,7 @@ node_templates:
   drupal_security_group:
     type: cloudify.openstack.nodes.SecurityGroup
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       rules:
         - remote_ip_prefix: 0.0.0.0/0
           port: 8080
@@ -289,7 +274,7 @@ node_templates:
         properties:
           default_instances: 1
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       floatingip:
         floating_network_name: { get_property: [ external_network, resource_id ] }
     relationships:
@@ -301,6 +286,7 @@ node_templates:
     instances:
       deploy: 1
     properties:
+      openstack_config: *openstack_config
       management_network_name: { get_property: [ private_network, resource_id ] }
     relationships:
       - target: mysql_vm_port
@@ -313,6 +299,7 @@ node_templates:
     instances:
       deploy: 1
     properties:
+      openstack_config: *openstack_config
       management_network_name: { get_property: [ private_network, resource_id ] }
     relationships:
       - target: memcached_vm_port
@@ -326,6 +313,8 @@ node_templates:
       scalable:
         properties:
           default_instances: 1
+    properties:
+      openstack_config: *openstack_config
     relationships:
       - target: apache_vm_port
         type: cloudify.openstack.server_connected_to_port
@@ -335,7 +324,7 @@ node_templates:
   mysql_vm_port:
     type: cloudify.openstack.nodes.Port
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
     relationships:
       - type: cloudify.relationships.contained_in
         target: private_network
@@ -347,7 +336,7 @@ node_templates:
   memcached_vm_port:
     type: cloudify.openstack.nodes.Port
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
     relationships:
       - type: cloudify.relationships.contained_in
         target: private_network
@@ -359,7 +348,7 @@ node_templates:
   apache_vm_port:
     type: cloudify.openstack.nodes.Port
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
     relationships:
       - type: cloudify.relationships.contained_in
         target: public_network
@@ -481,7 +470,7 @@ node_templates:
   private_subnet:
     type: cloudify.openstack.nodes.Subnet
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       use_external_resource: true
       resource_id: { get_input: private_subnet_name }
     relationships:
@@ -491,14 +480,14 @@ node_templates:
   private_network:
     type: cloudify.openstack.nodes.Network
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       use_external_resource: true
       resource_id: { get_input: private_network_name }
 
   public_subnet:
     type: cloudify.openstack.nodes.Subnet
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       use_external_resource: true
       resource_id: { get_input: public_subnet_name }
     relationships:
@@ -510,14 +499,14 @@ node_templates:
   public_network:
     type: cloudify.openstack.nodes.Network
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       use_external_resource: true
       resource_id: { get_input: public_network_name }
 
   router:
     type: cloudify.openstack.nodes.Router
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       use_external_resource: true
       resource_id: { get_input: router_name }
     relationships:
@@ -527,14 +516,14 @@ node_templates:
   external_network:
     type: cloudify.openstack.nodes.Network
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       use_external_resource: true
       resource_id: { get_input: external_network_name }
 
   key:
     type: cloudify.openstack.nodes.KeyPair
     properties:
-      openstack_config: { get_input: openstack_config }
+      openstack_config: *openstack_config
       resource_id: { get_input: key_name }
       private_key_path: { get_input: private_key_path }
 
