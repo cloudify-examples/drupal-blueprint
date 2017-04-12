@@ -1,7 +1,7 @@
 tosca_definitions_version: cloudify_dsl_1_3
 
 imports:
-  - http://www.getcloudify.org/spec/cloudify/3.4/types.yaml
+  - http://www.getcloudify.org/spec/cloudify/4.0/types.yaml
   - https://raw.githubusercontent.com/cloudify-cosmo/cloudify-azure-plugin/1.4.2/plugin.yaml
   - http://www.getcloudify.org/spec/diamond-plugin/1.3.5/plugin.yaml
   - scale.yaml
@@ -17,28 +17,10 @@ imports:
 inputs:
 
   resource_prefix:
-    default: cfy
+    default: drp
 
   resource_suffix:
-    default: 10
-
-  # Azure account information
-
-  subscription_id:
-    type: string
-    required: false
-
-  tenant_id:
-    type: string
-    required: false
-
-  client_id:
-    type: string
-    required: false
-
-  client_secret:
-    type: string
-    required: false
+    default: '1'
 
   location:
     type: string
@@ -67,7 +49,7 @@ inputs:
   vm_size:
     type: string
     required: true
-    default: Standard_A2
+    default: Standard_A0
 
   vm_os_family:
     type: string
@@ -108,12 +90,14 @@ inputs:
     required: true
     default: Cl0ud1fy!
 
+  vm_os_username_public_key_data:
+    default: ssh-rsa AAAAA3----your-key-here----aabbzz
+
   vm_os_pubkeys:
     description: the public key
     default:
     - path: {concat:[ '/home/', { get_input: vm_os_username }, '/.ssh/authorized_keys' ]}
-      keyData:
-        "ssh-rsa AAAAA3----your-key-here----aabbzz"
+      keyData: { get_input: vm_os_username_public_key_data }
 
   vm_os_pubkey_auth_only:
     default: true
@@ -133,19 +117,16 @@ inputs:
   memcachePort:
     default: 11211
 
+  cloudify_manager_agent_key_path:
+    description: >
+      This is the private key that matches the public key in input vm_os_username_public_key_data.
+    default: /home/cloudify/.ssh/id_rsa
+
   agent_config:
     default:
       user: { get_input: vm_os_username }
-      password: { get_input: vm_os_password }
-      port: 22
+      key: { get_input: cloudify_manager_agent_key_path }
       install_method: remote
-
-  azure_config:
-    default:
-      subscription_id: { get_input: subscription_id }
-      tenant_id: { get_input: tenant_id }
-      client_id: { get_input: client_id }
-      client_secret: { get_input: client_secret }
 
   schemaurl:
     type: string
@@ -154,6 +135,13 @@ inputs:
   drupalImageURL:
     type:
     default: 'http://repository.cloudifysource.org/org/cloudifysource/examples/drupal/babies_image_d7_v2.zip'
+
+dsl_definitions:
+  azure_config: &azure_config
+    subscription_id: { get_secret: subscription_id }
+    tenant_id: { get_secret: tenant_id }
+    client_id: { get_secret: client_id }
+    client_secret: { get_secret: client_secret }
 
 node_types:
 
@@ -172,7 +160,7 @@ node_types:
       os_family:
         default: { get_input: vm_os_family }
       azure_config:
-        default: { get_input: azure_config }
+        default: *azure_config
       resource_config:
         default:
           hardwareProfile:
@@ -498,13 +486,13 @@ node_templates:
     properties:
       name: {concat:[{get_input: resource_prefix},arg,{get_input: resource_suffix}]}
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
 
   storage_account:
     type: cloudify.azure.nodes.storage.StorageAccount
     properties:
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
         accountType: Standard_LRS
@@ -517,7 +505,7 @@ node_templates:
     properties:
       resource_group_name: { get_input: mgr_resource_group_name }
       name: { get_input: mgr_virtual_network_name }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       use_external_resource: true
       location: { get_input: location }
     relationships:
@@ -529,7 +517,7 @@ node_templates:
     properties:
       resource_group_name: { get_input: mgr_resource_group_name }
       name: { get_input: mgr_subnet_name }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       use_external_resource: true
       location: { get_input: location }
     relationships:
@@ -541,7 +529,7 @@ node_templates:
     properties:
       name: {concat:[{get_input: resource_prefix},nsg,{get_input: resource_suffix}]}
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
         securityRules:
@@ -653,7 +641,7 @@ node_templates:
     properties:
       name: {concat:[{get_input: resource_prefix},availset,{get_input: resource_suffix}]}
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
     relationships:
     - type: cloudify.azure.relationships.contained_in_resource_group
@@ -663,7 +651,7 @@ node_templates:
     type: cloudify.azure.nodes.network.NetworkInterfaceCard
     properties:
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
     relationships:
     - type: cloudify.azure.relationships.contained_in_resource_group
@@ -677,7 +665,7 @@ node_templates:
     type: cloudify.azure.nodes.network.NetworkInterfaceCard
     properties:
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
     relationships:
     - type: cloudify.azure.relationships.contained_in_resource_group
@@ -691,7 +679,7 @@ node_templates:
     type: cloudify.azure.nodes.network.NetworkInterfaceCard
     properties:
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
     relationships:
     - type: cloudify.azure.relationships.contained_in_resource_group
@@ -705,7 +693,7 @@ node_templates:
     type: cloudify.azure.nodes.network.IPConfiguration
     properties:
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
         privateIPAllocationMethod: Dynamic
@@ -717,7 +705,7 @@ node_templates:
     type: cloudify.azure.nodes.network.IPConfiguration
     properties:
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
         privateIPAllocationMethod: Dynamic
@@ -729,7 +717,7 @@ node_templates:
     type: cloudify.azure.nodes.network.IPConfiguration
     properties:
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
         privateIPAllocationMethod: Dynamic
@@ -743,7 +731,7 @@ node_templates:
     type: cloudify.azure.nodes.network.PublicIPAddress
     properties:
       location: { get_input: location }
-      azure_config: { get_input: azure_config }
+      azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
         publicIPAllocationMethod: Static

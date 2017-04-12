@@ -1,5 +1,0 @@
-aws_secret_access_key: ''
-aws_access_key_id: ''
-vpc_id: ''
-public_subnet_id: ''
-private_subnet_id: ''
