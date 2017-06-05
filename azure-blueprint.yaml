@@ -1,18 +1,10 @@
 tosca_definitions_version: cloudify_dsl_1_3
 
 imports:
-  - http://www.getcloudify.org/spec/cloudify/4.0/types.yaml
-  - https://raw.githubusercontent.com/cloudify-cosmo/cloudify-azure-plugin/1.4.2/plugin.yaml
+  - http://www.getcloudify.org/spec/cloudify/4.0.1/types.yaml
+  - https://raw.githubusercontent.com/cloudify-cosmo/cloudify-azure-plugin/1.4.3/plugin.yaml
   - http://www.getcloudify.org/spec/diamond-plugin/1.3.5/plugin.yaml
   - scale.yaml
-
-#####################################################################################
-# inputs section allows the user to use same
-# blueprint for creating different deployments, each one
-# with its own parameters.
-# to specify deployment inputs run:
-#   - cfy deployments create -b <blueprint_id> -d <deployment_id> -i inputs.json
-#####################################################################################
 
 inputs:
 
@@ -20,89 +12,31 @@ inputs:
     default: drp
 
   resource_suffix:
-    default: '1'
-
-  location:
-    type: string
-    required: true
-    default: eastus
+    default: '0'
 
   retry_after:
     type: integer
     default: 60
 
-  # Existing manager resources
-  mgr_resource_group_name:
-    type: string
-    required: true
+  size:
+    default: { get_secret: small_image_size }
 
-  mgr_virtual_network_name:
-    type: string
-    required: true
+  image:
+    default:
+      publisher: { get_secret: ubuntu_trusty_image_publisher }
+      offer: { get_secret: ubuntu_trusty_image_offer }
+      sku: { get_secret: ubuntu_trusty_image_sku }
+      version: { get_secret: ubuntu_trusty_image_version }
 
-  mgr_subnet_name:
-    type: string
-    required: true
+  agent_user:
+    description: The user name of the agent on the instance created from the image.
+    default: ubuntu
 
-  # Virtual Machine information
-
-  vm_size:
-    type: string
-    required: true
-    default: Standard_A0
-
-  vm_os_family:
-    type: string
-    required: true
-    default: linux
-
-  vm_image_publisher:
-    type: string
-    required: true
-    default: Canonical
-
-  vm_image_offer:
-    type: string
-    required: true
-    default: UbuntuServer
-
-  vm_image_sku:
-    type: string
-    required: true
-    default: 14.04.4-LTS
-
-  vm_image_version:
-    type: string
-    required: true
-    default: 14.04.201604060
-
-  vm_os_username:
-    description: >
-      Username to create as the VM's administrator user
-    type: string
-    required: true
-    default: cloudify
-
-  vm_os_password:
-    description: >
-      Password to use for the VM's administrator user
-    type: string
-    required: true
-    default: Cl0ud1fy!
-
-  vm_os_username_public_key_data:
-    default: ssh-rsa AAAAA3----your-key-here----aabbzz
-
-  vm_os_pubkeys:
+  ssh_public_keys:
     description: the public key
     default:
-    - path: {concat:[ '/home/', { get_input: vm_os_username }, '/.ssh/authorized_keys' ]}
-      keyData: { get_input: vm_os_username_public_key_data }
-
-  vm_os_pubkey_auth_only:
-    default: true
-
-  # Application information
+    - path: {concat:[ '/home/', { get_input: agent_user }, '/.ssh/authorized_keys' ]}
+      keyData: { get_secret: agent_key_public }
 
   docRoot:
     default: /var/www/html
@@ -116,17 +50,6 @@ inputs:
 
   memcachePort:
     default: 11211
-
-  cloudify_manager_agent_key_path:
-    description: >
-      This is the private key that matches the public key in input vm_os_username_public_key_data.
-    default: /home/cloudify/.ssh/id_rsa
-
-  agent_config:
-    default:
-      user: { get_input: vm_os_username }
-      key: { get_input: cloudify_manager_agent_key_path }
-      install_method: remote
 
   schemaurl:
     type: string
@@ -154,41 +77,44 @@ node_types:
     derived_from: cloudify.azure.nodes.compute.VirtualMachine
     properties:
       location:
-        default: { get_input: location }
+        default: { get_secret: location }
       retry_after:
         default: { get_input: retry_after }
       os_family:
-        default: { get_input: vm_os_family }
+        default: linux
       azure_config:
         default: *azure_config
       resource_config:
         default:
-          hardwareProfile:
-            vmSize: { get_input: vm_size }
-          storageProfile:
-            imageReference:
-              publisher: { get_input: vm_image_publisher }
-              offer: { get_input: vm_image_offer }
-              sku: { get_input: vm_image_sku }
-              version: { get_input: vm_image_version }
-          osProfile:
-            adminUsername: { get_input: vm_os_username }
-            adminPassword: { get_input: vm_os_password }
-            linuxConfiguration:
-              ssh:
-                publicKeys: { get_input: vm_os_pubkeys }
-              disablePasswordAuthentication: { get_input: vm_os_pubkey_auth_only }
+          hardwareProfile: {}
+          storageProfile: {}
+          osProfile: {}
       agent_config:
-        default: { get_input: agent_config }
+        default:
+          user: { get_input: agent_user }
+          install_method: remote
+          port: 22
+          key: { get_secret: agent_key_private }
     interfaces:
+      cloudify.interfaces.lifecycle:
+        create:
+          implementation: pkg.cloudify_azure.resources.compute.virtualmachine.create
+          inputs:
+            args:
+              default:
+                hardwareProfile:
+                  vmSize: { get_input: size }
+                storageProfile:
+                  imageReference: { get_input: image}
+                osProfile:
+                  adminUsername: { get_input: agent_user }
+                  adminPassword: ''
+                  linuxConfiguration:
+                    ssh:
+                      publicKeys: { get_input: ssh_public_keys }
+                    disablePasswordAuthentication: true
       utils.ops:
         restart_vm_op: utils-scripts/restart_vm.sh
-      ###########################################################
-      # We are infact telling cloudify to install a diamond
-      # monitoring agent on the server.
-      #
-      # (see https://github.com/BrightcoveOS/Diamond)
-      ###########################################################
       cloudify.interfaces.monitoring_agent:
           install:
             implementation: diamond.diamond_agent.tasks.install
@@ -199,10 +125,6 @@ node_types:
           start: diamond.diamond_agent.tasks.start
           stop: diamond.diamond_agent.tasks.stop
           uninstall: diamond.diamond_agent.tasks.uninstall
-      ###########################################################
-      # Adding some collectors. These collectors are necessary
-      # for the Cloudify UI to display the deafult metrics.
-      ###########################################################
       cloudify.interfaces.monitoring:
           start:
             implementation: diamond.diamond_agent.tasks.add_collectors
@@ -333,9 +255,7 @@ relationships:
       cloudify.interfaces.relationship_lifecycle:
         establish: drupal-scripts/configure-memcached-drupal.sh
 
-
 node_templates:
-
 
   mysql_database:
     type: mysql_dbms
@@ -481,54 +401,11 @@ node_templates:
     - type: cloudify.azure.relationships.connected_to_nic
       target: memcached_nic
 
-  resource_group:
-    type: cloudify.azure.nodes.ResourceGroup
-    properties:
-      name: {concat:[{get_input: resource_prefix},arg,{get_input: resource_suffix}]}
-      location: { get_input: location }
-      azure_config: *azure_config
-
-  storage_account:
-    type: cloudify.azure.nodes.storage.StorageAccount
-    properties:
-      location: { get_input: location }
-      azure_config: *azure_config
-      retry_after: { get_input: retry_after }
-      resource_config:
-        accountType: Standard_LRS
-    relationships:
-    - type: cloudify.azure.relationships.contained_in_resource_group
-      target: resource_group
-
-  virtual_network:
-    type: cloudify.azure.nodes.network.VirtualNetwork
-    properties:
-      resource_group_name: { get_input: mgr_resource_group_name }
-      name: { get_input: mgr_virtual_network_name }
-      azure_config: *azure_config
-      use_external_resource: true
-      location: { get_input: location }
-    relationships:
-    - type: cloudify.azure.relationships.contained_in_resource_group
-      target: resource_group
-
-  subnet:
-    type: cloudify.azure.nodes.network.Subnet
-    properties:
-      resource_group_name: { get_input: mgr_resource_group_name }
-      name: { get_input: mgr_subnet_name }
-      azure_config: *azure_config
-      use_external_resource: true
-      location: { get_input: location }
-    relationships:
-    - type: cloudify.azure.relationships.contained_in_virtual_network
-      target: virtual_network
-
   drupal_security_group:
     type: cloudify.azure.nodes.network.NetworkSecurityGroup
     properties:
       name: {concat:[{get_input: resource_prefix},nsg,{get_input: resource_suffix}]}
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
@@ -640,7 +517,7 @@ node_templates:
     type: cloudify.azure.nodes.compute.AvailabilitySet
     properties:
       name: {concat:[{get_input: resource_prefix},availset,{get_input: resource_suffix}]}
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
     relationships:
@@ -650,7 +527,7 @@ node_templates:
   mysql_nic:
     type: cloudify.azure.nodes.network.NetworkInterfaceCard
     properties:
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
     relationships:
@@ -664,7 +541,7 @@ node_templates:
   memcached_nic:
     type: cloudify.azure.nodes.network.NetworkInterfaceCard
     properties:
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
     relationships:
@@ -678,7 +555,7 @@ node_templates:
   apache_nic:
     type: cloudify.azure.nodes.network.NetworkInterfaceCard
     properties:
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
     relationships:
@@ -692,7 +569,7 @@ node_templates:
   mysql_nic_ip_config:
     type: cloudify.azure.nodes.network.IPConfiguration
     properties:
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
@@ -704,7 +581,7 @@ node_templates:
   memcached_nic_ip_config:
     type: cloudify.azure.nodes.network.IPConfiguration
     properties:
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
@@ -716,7 +593,7 @@ node_templates:
   apache_nic_ip_config:
     type: cloudify.azure.nodes.network.IPConfiguration
     properties:
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
@@ -730,7 +607,7 @@ node_templates:
   apache_ip:
     type: cloudify.azure.nodes.network.PublicIPAddress
     properties:
-      location: { get_input: location }
+      location: { get_secret: location }
       azure_config: *azure_config
       retry_after: { get_input: retry_after }
       resource_config:
@@ -738,6 +615,49 @@ node_templates:
     relationships:
     - type: cloudify.azure.relationships.contained_in_resource_group
       target: resource_group
+
+  subnet:
+    type: cloudify.azure.nodes.network.Subnet
+    properties:
+      resource_group_name: { get_secret: mgr_resource_group_name }
+      name: { get_secret: mgr_subnet_name }
+      azure_config: *azure_config
+      use_external_resource: true
+      location: { get_secret: location }
+    relationships:
+    - type: cloudify.azure.relationships.contained_in_virtual_network
+      target: virtual_network
+
+  virtual_network:
+    type: cloudify.azure.nodes.network.VirtualNetwork
+    properties:
+      resource_group_name: { get_secret: mgr_resource_group_name }
+      name: { get_secret: mgr_virtual_network_name }
+      azure_config: *azure_config
+      use_external_resource: true
+      location: { get_secret: location }
+    relationships:
+    - type: cloudify.azure.relationships.contained_in_resource_group
+      target: resource_group
+
+  storage_account:
+    type: cloudify.azure.nodes.storage.StorageAccount
+    properties:
+      location: { get_secret: location }
+      azure_config: *azure_config
+      retry_after: { get_input: retry_after }
+      resource_config:
+        accountType: Standard_LRS
+    relationships:
+    - type: cloudify.azure.relationships.contained_in_resource_group
+      target: resource_group
+
+  resource_group:
+    type: cloudify.azure.nodes.ResourceGroup
+    properties:
+      name: {concat:[{get_input: resource_prefix},arg,{get_input: resource_suffix}]}
+      location: { get_secret: location }
+      azure_config: *azure_config
 
 plugins:
 
@@ -768,24 +688,12 @@ workflows:
       parameters:
          project_name: {}
 
-   # See Built-in Workflows in http://getcloudify.org/guide/3.3.1/guide-workflows.html#built-in-workflows
-#   drushinstall:
-#      mapping: default_workflows.cloudify.plugins.workflows.execute_operation
-#      parameters:
-#         operation: drupal.interfaces.action.install_project
-#         node_ids:
-#           - drupal_app
-
    drush_setvar:
       mapping: drush-plugin.drush.tasks.set_variable
       parameters:
          variable_name:
            default: theme_default
          variable_value: {}
-
-# Syntax without parameters
-# drush_dl: drush-plugin.drush.tasks.drush_download_module
-# drush_en: drush-plugin.drush.tasks.drush_enable_module
 
 outputs:
 
