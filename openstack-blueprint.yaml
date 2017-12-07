@@ -1,12 +1,12 @@
 tosca_definitions_version: cloudify_dsl_1_3
 
 imports:
-  - http://www.getcloudify.org/spec/cloudify/4.0.1/types.yaml
+  - https://raw.githubusercontent.com/cloudify-cosmo/cloudify-manager/4.2/resources/rest-service/cloudify/types/types.yaml
+  - http://www.getcloudify.org/spec/openstack-plugin/2.4.1.1/plugin.yaml
+  - http://www.getcloudify.org/spec/utilities-plugin/1.4.1/plugin.yaml
+  - https://raw.githubusercontent.com/cloudify-incubator/cloudify-utilities-plugin/1.4.1/cloudify_cloudinit/types.yaml
   - http://www.getcloudify.org/spec/diamond-plugin/1.3.5/plugin.yaml
-  - http://www.getcloudify.org/spec/openstack-plugin/2.0.1/plugin.yaml
   - scale.yaml
-  - types/cloud_config/cloud-config.yaml
-
 
 inputs:
 
@@ -492,18 +492,16 @@ node_templates:
         target: cloudify_host_cloud_config
 
   cloudify_host_cloud_config:
-    type: cloudify.nodes.CloudConfig
-    interfaces:
-      cloudify.interfaces.lifecycle:
-        create:
-          inputs:
-            cloud_config:
-              users:
-                - name: { get_input: agent_user }
-                  shell: /bin/bash
-                  sudo: ['ALL=(ALL) NOPASSWD:ALL']
-                  ssh-authorized-keys:
-                    - { get_secret: agent_key_public }
+    type: cloudify.nodes.CloudInit.CloudConfig
+    properties:
+      resource_config:
+        manage_etc_hosts: True
+        users:
+          - name: { get_input: agent_user }
+            shell: /bin/bash
+            sudo: ['ALL=(ALL) NOPASSWD:ALL']
+            ssh-authorized-keys:
+              - { get_secret: agent_key_public }
 
 plugins:
   drush-plugin:
