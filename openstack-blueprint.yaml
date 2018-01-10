@@ -9,6 +9,9 @@ imports:
 
 inputs:
 
+  environment_blueprint_filename:
+    default: openstack-blueprint.yaml
+
   keystone_username:
     default: { get_secret: keystone_username }
 
@@ -69,7 +72,16 @@ inputs:
   docRoot:
     default: /var/www/html
 
-  dbPort:
+  db_name:
+    default: mydrupaldb
+
+  db_user_name:
+    default: admin
+
+  db_user_password:
+    default: 123
+
+  db_port:
     default: 3306
 
   memcachePort:
@@ -138,35 +150,6 @@ node_types:
                       devices: x?vd[a-z]+[0-9]*$
                   NetworkCollector: {}
 
-  mysql_dbms:
-    derived_from: cloudify.nodes.DBMS
-    properties:
-      port:
-        description: MySQL port
-        type: integer
-      sectionNames:
-        description: A command separated list of my.cnf section names
-        type: string
-      variableNames:
-        description: A command separated list of my.cnf variable names
-        type: string
-      newValues:
-        description: A command separated list of my.cnf values for the above variable names
-        type: string
-
-  mysql_schema:
-    derived_from: cloudify.nodes.ApplicationModule
-    properties:
-      port:
-        description: MySQL port
-        type: integer
-      schemaurl:
-        description: schema zip url
-        type: string
-      query:
-        description: Test Query
-        type: string
-
   memcached_db_server:
     derived_from: cloudify.nodes.DBMS
     properties:
@@ -233,19 +216,24 @@ node_types:
       docRoot:
         description: docRoot of the Drupal
         type: string
+      dbPort:
+        description: DB port number
+        type: string
+      dbHost:
+        description: DB host
+        type: string
 
 relationships:
+
   drupal_server_connected_to_mysql_database:
     derived_from: cloudify.relationships.connected_to
 
-  drupal_app_connected_to_mysql_drupal_schema:
-    derived_from: cloudify.relationships.connected_to
+  drupal_app_connected_to_mysql_db:
+    derived_from: cloudify.relationships.depends_on
     source_interfaces:
       cloudify.interfaces.relationship_lifecycle:
-        postconfigure: drupal-scripts/configure-mysql-drupal.sh
-    target_interfaces:
-      cloudify.interfaces.relationship_lifecycle:
-        postconfigure: mysql-scripts/configure-mysql-schema.sh
+        establish: drupal-scripts/configure-mysql-drupal.sh
+
   drupal_app_connected_to_memcached_app:
     derived_from: cloudify.relationships.connected_to
     source_interfaces:
@@ -295,17 +283,6 @@ node_templates:
     relationships:
       - type: cloudify.relationships.contained_in
         target: public_network
-
-  mysql_vm:
-    type: host
-    instances:
-      deploy: 1
-    properties:
-      openstack_config: *openstack_config
-      management_network_name: { get_property: [ private_network, resource_id ] }
-    relationships:
-      - target: mysql_vm_port
-        type: cloudify.openstack.server_connected_to_port
 
   memcached_vm:
     type: host
@@ -368,44 +345,6 @@ node_templates:
       - type: cloudify.openstack.port_connected_to_floating_ip
         target: apache_ip
 
-  mysql_database:
-    type: mysql_dbms
-    properties:
-      port: { get_input: dbPort }
-      sectionNames: mysqld
-      variableNames: bind-address
-      newValues: 0.0.0.0
-    interfaces:
-      cloudify.interfaces.lifecycle:
-        create: mysql-scripts/install-mysql.sh
-        start: mysql-scripts/start-mysql.sh
-        stop: mysql-scripts/stop-mysql.sh
-    relationships:
-      - target: mysql_vm
-        type: cloudify.relationships.contained_in
-
-  mysql_drupal_schema:
-    type: mysql_schema
-    properties:
-      port: { get_input: dbPort }
-      query: select name,mail from users
-      schemaurl: http://repository.cloudifysource.org/org/cloudifysource/examples/drupal/new_babies7.zip
-    interfaces:
-      cloudify.interfaces.lifecycle:
-        configure: mysql-scripts/configure-mysql-schema.sh
-      cloudify.interfaces.monitoring:
-         start:
-            implementation: diamond.diamond_agent.tasks.add_collectors
-            inputs:
-               collectors_config:
-                  MySQLCollector:
-                     config:
-                        enabled: True
-                        hosts: "admin:123@localhost:3306/mydrupaldb"
-    relationships:
-      - target: mysql_database
-        type: cloudify.relationships.contained_in
-
   memcached_server:
     type: memcached_db_server
     properties:
@@ -426,7 +365,7 @@ node_templates:
     interfaces:
       cloudify.interfaces.lifecycle:
         start: memcached-scripts/start-memcached.sh
-        stop: memcached-scripts/stop-memcached.sh  
+        stop: memcached-scripts/stop-memcached.sh
     relationships:
       - target: memcached_server
         type: cloudify.relationships.contained_in
@@ -448,8 +387,6 @@ node_templates:
     relationships:
       - type: cloudify.relationships.contained_in
         target: apache_vm
-      - type: drupal_server_connected_to_mysql_database
-        target: mysql_database
 
   drupal_app:
     type: drupal_application
@@ -457,25 +394,43 @@ node_templates:
       docRoot: { get_input: docRoot }
       drupalImageURL: http://repository.cloudifysource.org/org/cloudifysource/examples/drupal/babies_image_d7_v2.zip
       app_name: My drupal web server
-      dbName: mydrupaldb
-      dbUserName: admin
-      dbUserPassword: 123  
+      dbName: { get_input: db_name }
+      dbUserName: { get_input: db_user_name }
+      dbUserPassword: { get_input: db_user_password }
+      dbPort: { get_input: db_port }
+      dbHost: { get_attribute: [ mysql_db, deployment, outputs, ip ] }  
     interfaces:
-      cloudify.interfaces.lifecycle:        
+      cloudify.interfaces.lifecycle:
         start: apache-scripts/start-apache.sh
         stop: apache-scripts/stop-apache.sh
       drupal.interfaces.action:
         install_project: drupal-scripts/drush-install.sh
         set_variable: drupal-scripts/drush-setvar.sh
-
     relationships:
       - type: cloudify.relationships.contained_in
         target: drupal_server
       - type: drupal_app_connected_to_memcached_app
         target: memcached_app
-      - type: drupal_app_connected_to_mysql_drupal_schema
-        target: mysql_drupal_schema
+      - type: drupal_app_connected_to_mysql_db
+        target: mysql_db
 
+  mysql_db:
+    type: cloudify.nodes.DeploymentProxy
+    properties:
+      resource_config:
+        blueprint:
+          id: db
+          blueprint_archive: https://github.com/mabuaisha/mysqldb-blueprint/archive/master.zip
+          main_file_name: { get_input: environment_blueprint_filename }
+        deployment:
+          id: db
+          inputs:
+            db_name: { get_input: db_name }
+            db_user_name: { get_input: db_user_name }
+            db_user_password: { get_input: db_user_password }
+            db_port: { get_input: db_port }
+          outputs:
+            mysql_ip: ip
 
   private_subnet:
     type: cloudify.openstack.nodes.Subnet
@@ -580,11 +535,16 @@ workflows:
       variable_value: {}
 
 outputs:
+
   endpoint:
     description: My application endpoint
     value:
       drupal_url: { concat: ['http://', { get_attribute: [apache_ip, floating_ip_address] },':', { get_property: [drupal_server, newPort] }] }
 
+  mysql_ip:
+    description: My Database application endpoint
+    value:
+      mysql_ip: { get_attribute: [ mysql_db, deployment, outputs, ip ] }
 
 groups:
 
