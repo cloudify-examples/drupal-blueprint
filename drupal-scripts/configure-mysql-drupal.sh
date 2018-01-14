@@ -15,10 +15,10 @@ ctx logger info "${currHostName}:${currFilename} :dbUsername ${dbUsername}"
 dbPassword=$(ctx source node properties dbUserPassword)
 ctx logger info "${currHostName}:${currFilename} :dbPassword ${dbPassword}"
 
-dbPort=$(ctx target node properties port)
+dbPort=$(ctx source node properties dbPort)
 ctx logger info "${currHostName}:${currFilename} :dbPort ${dbPort}"
 
-dbHost=$(ctx target instance host_ip)
+dbHost=$(ctx source node properties dbHost)
 ctx logger info "${currHostName}:${currFilename} :dbHost ${dbHost}"
 
 drupalImageURL=$(ctx source node properties drupalImageURL)
