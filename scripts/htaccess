@@ -1,0 +1,8 @@
+Action application/x-hg-php53 /cgi-sys/php53
+AddType application/x-hg-php53 .php 
+RewriteEngine on
+RewriteBase /
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !=/favicon.ico
+RewriteRule ^ index.php [L] 
