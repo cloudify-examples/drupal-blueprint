@@ -41,12 +41,6 @@ inputs:
       This subnet should allow elastic IPs and it should also have either a NAT gateway or NAT instance.
     default: { get_secret: public_subnet_id }
 
-  private_subnet_id:
-    description: >
-      The ID of the private subnet in vpc_id.
-      This subnet should have internet routing to a NAT on another subnet.
-    default: { get_secret: private_subnet_id }
-
   availability_zone:
     description: >
       The availability zone where to create the VM, should be in the same availability zone as public_subnet_id.
@@ -98,11 +92,11 @@ node_templates:
           inputs: *database_connection
     relationships:
     - type: cloudify.relationships.contained_in
-      target: apache_vm
+      target: host
     - type: cloudify.relationships.depends_on
       target: mysqldb_endpoint
 
-  apache_vm:
+  host:
     type: cloudify.aws.nodes.Instance
     properties:
       name: Apache Instance
@@ -128,14 +122,8 @@ node_templates:
               placement: { get_input: availability_zone }
               user_data: { get_attribute: [ cloudify_host_cloud_config, cloud_config ] }
     relationships:
-      - type: cloudify.relationships.contained_in
-        target: vpc
-      - type: cloudify.aws.relationships.instance_connected_to_security_group
-        target: drupal_security_group
-      - type: cloudify.aws.relationships.instance_connected_to_subnet
-        target: public_subnet
-      - target: apache_ip
-        type: cloudify.aws.relationships.instance_connected_to_elastic_ip
+      - type: cloudify.aws.relationships.instance_connected_to_eni
+        target: nic
       - type: cloudify.relationships.depends_on
         target: ubuntu_trusty_ami
 
@@ -153,107 +141,92 @@ node_templates:
             - '099720109477'
       client_config: *client_config
 
-  drupal_security_group:
-    type: cloudify.aws.nodes.SecurityGroup
+  ip:
+    type: cloudify.nodes.aws.ec2.ElasticIP
     properties:
-      aws_config: *aws_config
-      description: Security group for Cloudify Manager VM
-      rules:
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 8080
-          to_port: 8080
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 8000
-          to_port: 8000
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 8081
-          to_port: 8081
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 22
-          to_port: 22
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 80
-          to_port: 80
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 3306
-          to_port: 3306
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 55672
-          to_port: 55672
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 5672
-          to_port: 5672
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 53229
-          to_port: 53229
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 8101
-          to_port: 8101
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: 8100
-          to_port: 8100
+      resource_config:
+        kwargs:
+          Domain: 'vpc'
+      client_config: *client_config
     relationships:
-      - type: cloudify.aws.relationships.security_group_contained_in_vpc
-        target: vpc
+      - type: cloudify.relationships.depends_on
+        target: nic
 
-  apache_ip:
-    type: cloudify.aws.nodes.ElasticIP
+  nic:
+    type: cloudify.nodes.aws.ec2.Interface
     properties:
-      aws_config: *aws_config
-      domain: vpc
-    capabilities:
-      scalable:
-        properties:
-          default_instances: 1
+      client_config: *client_config
+      resource_config:
+        kwargs:
+          Description: Created by haproxy-blueprint aws-blueprint.yaml.
+          SubnetId: { get_input: public_subnet_id }
     relationships:
-      - type: cloudify.relationships.contained_in
-        target: vpc
+      - type: cloudify.relationships.depends_on
+        target: public_subnet
+      - type: cloudify.relationships.depends_on
+        target: security_group
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          inputs:
+            resource_config:
+              Description: Created by haproxy-blueprint aws-blueprint.yaml.
+              SubnetId: { get_input: public_subnet_id }
+              Groups:
+              - { get_attribute: [ security_group, aws_resource_id ] }
+
+  security_group_rules:
+    type: cloudify.nodes.aws.ec2.SecurityGroupRuleIngress
+    properties:
+      client_config: *client_config
+      resource_config:
+        kwargs:
+          IpPermissions:
+          - IpProtocol: tcp
+            FromPort: 80
+            ToPort: 80
+            IpRanges:
+            - CidrIp: 0.0.0.0/0
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: security_group
+
+  security_group:
+    type: cloudify.nodes.aws.ec2.SecurityGroup
+    properties:
+      resource_config:
+        kwargs:
+          GroupName: SaltExampleSecurityGroup
+          Description: Created by salt-blueprint aws-blueprint.yaml.
+          VpcId: { get_input: vpc_id }
+      client_config: *client_config
+    relationships:
+    - type: cloudify.relationships.depends_on
+      target: vpc
 
   public_subnet:
-    type: cloudify.aws.nodes.Subnet
+    type: cloudify.nodes.aws.ec2.Subnet
     properties:
-      aws_config: *aws_config
+      client_config: *client_config
       use_external_resource: true
       resource_id: { get_input: public_subnet_id }
-      cidr_block: N/A
-      availability_zone: N/A
+      resource_config:
+        kwargs:
+          CidrBlock: 'N/A'
+          AvailabilityZone: 'N/A'
     relationships:
-      - type: cloudify.aws.relationships.subnet_contained_in_vpc
-        target: vpc
-
-  private_subnet:
-    type: cloudify.aws.nodes.Subnet
-    properties:
-      aws_config: *aws_config
-      use_external_resource: true
-      resource_id: { get_input: private_subnet_id }
-      cidr_block:  N/A
-      availability_zone:  N/A
-    relationships:
-      - type: cloudify.aws.relationships.subnet_contained_in_vpc
+      - type: cloudify.relationships.depends_on
         target: vpc
 
   vpc:
-    type: cloudify.aws.nodes.VPC
+    type: cloudify.nodes.aws.ec2.Vpc
     properties:
-      aws_config: *aws_config
+      client_config: *client_config
       use_external_resource: true
       resource_id: { get_input: vpc_id }
-      cidr_block: N/A
-    relationships:
-      - type: cloudify.relationships.depends_on
-        target: cloudify_host_cloud_config
+      resource_config:
+        kwargs:
+          CidrBlock: 'N/A'
 
   cloudify_host_cloud_config:
     type: cloudify.nodes.CloudInit.CloudConfig
@@ -271,55 +244,12 @@ outputs:
   endpoint:
     description: My application endpoint
     value:
-      drupal_url: { concat: ['http://', { get_attribute: [apache_vm, public_ip_address] },':80' ] }
+      drupal_url: { concat: ['http://', { get_attribute: [ip, aws_resource_id] },':80' ] }
 
 groups:
 
-  scale_up_group:
-    members: [apache_vm]
-    policies:
-      auto_scale_up:
-        type: scale_policy_type
-        properties:
-          default_instances: 1
-          policy_operates_on_group: true
-          scale_limit: 5
-          scale_direction: '<'
-          scale_threshold: 40
-          service_selector: .*apache_vm.*.cpu.total.user
-          cooldown_time: 60
-        triggers:
-          execute_scale_workflow:
-            type: cloudify.policies.triggers.execute_workflow
-            parameters:
-              workflow: scale
-              workflow_parameters:
-                delta: 1
-                scalable_entity_name: drupal
-
-  scale_down_group:
-    members: [apache_vm]
-    policies:
-      auto_scale_down:
-        type: scale_policy_type
-        properties:
-          default_instances: 1
-          scale_limit: 2
-          scale_direction: '>'
-          scale_threshold: 20
-          service_selector: .*apache_vm.*.cpu.total.user
-          cooldown_time: 60
-        triggers:
-          execute_scale_workflow:
-            type: cloudify.policies.triggers.execute_workflow
-            parameters:
-              workflow: scale
-              workflow_parameters:
-                delta: -1
-                scalable_entity_name: drupal
-
   apache:
-    members: [apache_vm, apache_ip]
+    members: [host, ip, nic]
 
 policies:
   scale_policy1:
