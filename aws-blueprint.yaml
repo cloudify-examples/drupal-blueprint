@@ -18,7 +18,7 @@ inputs:
   ami:
     description: >
       An AWS AMI. Tested with a Ubuntu 14.04 image.
-    default: { get_secret: ubuntu_trusty_image }
+    default: { get_attribute: [ ubuntu_trusty_ami, aws_resource_id ] }
 
   instance_type:
     description: >
@@ -102,7 +102,6 @@ node_templates:
       image_id: { get_input: ami }
       instance_type: { get_input: instance_type }
       agent_config:
-        # default:
         install_method: remote
         user: { get_input: agent_user }
         port: 22
@@ -113,10 +112,10 @@ node_templates:
           implementation: aws.cloudify_aws.ec2.instance.create
           inputs:
             args:
-              # default:
               block_device_map:
                 '/dev/sda1':
                   delete_on_termination: true
+              image_id: { get_input: ami }
               placement: { get_input: availability_zone }
               user_data: { get_attribute: [ cloudify_host_cloud_config, cloud_config ] }
     relationships:
@@ -128,6 +127,22 @@ node_templates:
         target: public_subnet
       - target: apache_ip
         type: cloudify.aws.relationships.instance_connected_to_elastic_ip
+      - type: cloudify.relationships.depends_on
+        target: ubuntu_trusty_ami
+
+  ubuntu_trusty_ami:
+    type: cloudify.nodes.aws.ec2.Image
+    properties:
+      resource_config:
+        kwargs:
+          Filters:
+          - Name: name
+            Values:
+            - 'ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-20170727'
+          - Name: owner-id
+            Values:
+            - '099720109477'
+      client_config: *aws_config
 
   drupal_security_group:
     type: cloudify.aws.nodes.SecurityGroup
