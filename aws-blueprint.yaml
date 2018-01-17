@@ -129,7 +129,6 @@ node_templates:
       - target: apache_ip
         type: cloudify.aws.relationships.instance_connected_to_elastic_ip
 
-
   drupal_security_group:
     type: cloudify.aws.nodes.SecurityGroup
     properties:
