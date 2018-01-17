@@ -71,6 +71,9 @@ inputs:
     description: The user name of the agent on the instance created from the image.
     default: ubuntu
 
+  manager_network:
+    default: default
+
 dsl_definitions:
 
   openstack_config: &openstack_config
@@ -109,8 +112,9 @@ node_templates:
     properties:
       openstack_config: *openstack_config
       agent_config:
-        user: { get_input: agent_user }
+        network: { get_input: manager_network }
         install_method: remote
+        user: { get_input: agent_user }
         port: 22
         key: { get_input: agent_key_private }
       server:

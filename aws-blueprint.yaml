@@ -62,6 +62,9 @@ inputs:
       The content of the agent's public key.
     default: { get_secret: agent_key_public }
 
+  manager_network:
+    default: default
+
 dsl_definitions:
 
     aws_config: &aws_config
@@ -107,6 +110,7 @@ node_templates:
       image_id: { get_input: ami }
       instance_type: { get_input: instance_type }
       agent_config:
+        network: { get_input: manager_network }
         install_method: remote
         user: { get_input: agent_user }
         port: 22

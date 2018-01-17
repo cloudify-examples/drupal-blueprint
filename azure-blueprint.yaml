@@ -62,6 +62,9 @@ inputs:
     - path: {concat:[ '/home/', { get_input: agent_user }, '/.ssh/authorized_keys' ]}
       keyData: { get_input: agent_key_public }
 
+  manager_network:
+    default: default
+
 dsl_definitions:
   azure_config: &azure_config
     subscription_id: { get_secret: subscription_id }
@@ -113,8 +116,9 @@ node_templates:
               publicKeys: { get_input: ssh_public_keys }
             disablePasswordAuthentication: true
       agent_config:
-        user: { get_input: agent_user }
+        network: { get_input: manager_network }
         install_method: remote
+        user: { get_input: agent_user }
         port: 22
         key: { get_input: agent_key_private }
     relationships:
