@@ -1,0 +1,9 @@
+<VirtualHost *:80>
+  ServerAdmin webmaster@localhost
+  ServerName drupal844
+  DocumentRoot /var/www/html
+  <Directory />
+     Options FollowSymlinks
+     AllowOverride All
+  </Directory>
+</VirtualHost>

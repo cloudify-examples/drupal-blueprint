@@ -1,0 +1,68 @@
+inputs:
+
+  new_database_user:
+    default: drupal
+
+  new_database_password:
+    default: X0kdmdwethrngosdf88
+
+  db_name:
+    default: drupaldb
+
+  use_external_database:
+    default: false
+
+node_templates:
+
+  mysqldb_endpoint:
+    type: cloudify.nodes.DeploymentProxy
+    properties:
+      resource_config:
+        blueprint:
+          id: lb
+          blueprint_archive: https://github.com/cloudify-examples/haproxy-blueprint/archive/e2e.zip
+          main_file_name: { get_input: environment_blueprint_filename }
+          external_resource: { get_input: use_external_database }
+        deployment:
+          id: lb
+          inputs:
+            application_ip: ''
+          outputs:
+            ip: ip
+          external_resource: { get_input: use_external_database }
+        reexecute: false
+    relationships:
+      - type: cloudify.relationships.depends_on
+        target: db
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        configure:
+          implementation: cfy_util.cloudify_deployment_proxy.tasks.create_deployment
+          inputs:
+            resource_config:
+              blueprint: { get_property: [ SELF, resource_config, blueprint ] }
+              deployment:
+                id: { get_property: [ SELF, resource_config, deployment, id ] }
+                inputs:
+                  application_ip: { get_attribute: [ db, deployment, outputs, ips, 0 ] }
+                outputs:
+                  ip: { get_property: [ SELF, resource_config, deployment, outputs, ip ] }
+
+  db:
+    type: cloudify.nodes.DeploymentProxy
+    properties:
+      resource_config:
+        blueprint:
+          id: db
+          blueprint_archive: https://github.com/cloudify-examples/mariadb-blueprint/archive/e2e.zip
+          main_file_name: { get_input: environment_blueprint_filename }
+          external_resource: { get_input: use_external_database }
+        deployment:
+          id: db
+          inputs:
+            new_database_user: { get_input: new_database_user}
+            new_database_password: { get_input: new_database_password }
+          outputs:
+            cluster_addresses: ips
+          external_resource: { get_input: use_external_database }
+        reexecute: false

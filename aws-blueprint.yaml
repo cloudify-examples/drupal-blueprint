@@ -6,7 +6,9 @@ imports:
   - http://www.getcloudify.org/spec/diamond-plugin/1.3.5/plugin.yaml
   - http://www.getcloudify.org/spec/awssdk-plugin/1.2.0.1/plugin.yaml
   - https://github.com/cloudify-cosmo/cloudify-aws-plugin/releases/download/1.5.1.2/plugin.yaml
-  - scale.yaml
+  - http://www.getcloudify.org/spec/dblb/0.1/plugin.yaml
+  - imports/scale.yaml
+  - imports/db-lb.yaml
 
 inputs:
 
@@ -60,36 +62,6 @@ inputs:
       The content of the agent's public key.
     default: { get_secret: agent_key_public }
 
-  db_name:
-    default: mydrupaldb
-
-  db_user_name:
-    default: admin
-
-  db_user_password:
-    default: 123
-
-  db_port:
-    default: 3306
-
-  docRoot:
-    default: /var/www/html
-
-  dbBindAddress:
-    type: string
-    default: '0.0.0.0'
-
-  memcachePort:
-    default: 11211
-
-  drupal_security_group_name:
-    type: string
-    default: 'Drupal_AWS_Security_Group'
-
-  drupalImageURL:
-    type:
-    default: 'http://repository.cloudifysource.org/org/cloudifysource/examples/drupal/babies_image_d7_v2.zip'
-
 dsl_definitions:
 
     aws_config: &aws_config
@@ -98,159 +70,70 @@ dsl_definitions:
       ec2_region_name: { get_secret: ec2_region_name }
       ec2_region_endpoint: { get_secret: ec2_region_endpoint }
 
-node_types:
+node_templates:
 
-  host:
-    derived_from: cloudify.aws.nodes.Instance
+  drupal:
+    type: cloudify.nodes.Root
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create:
+          implementation: scripts/install-drupal.sh
+        configure:
+          implementation: scripts/create-db.py
+          inputs: &database_connection
+            db_host: { get_attribute: [ mysqldb_endpoint, deployment, outputs, ip ] }
+            db_user_name: { get_input: new_database_user }
+            db_password: { get_input: new_database_password }
+            db_name: { get_input: db_name }
+        delete:
+          implementation: scripts/delete-db.py
+          inputs: *database_connection
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: apache_vm
+    - type: cloudify.relationships.depends_on
+      target: mysqldb_endpoint
+
+  apache_vm:
+    type: cloudify.aws.nodes.Instance
     properties:
-      aws_config:
-        default: *aws_config
-      image_id:
-        default: { get_input: ami }
-      instance_type:
-        default: { get_input: instance_type }
+      name: Apache Instance
+      aws_config: *aws_config
+      image_id: { get_input: ami }
+      instance_type: { get_input: instance_type }
       agent_config:
-        default:
-          install_method: remote
-          user: { get_input: agent_user }
-          port: 22
-          key: { get_input: agent_key_private }
+        # default:
+        install_method: remote
+        user: { get_input: agent_user }
+        port: 22
+        key: { get_input: agent_key_private }
     interfaces:
       cloudify.interfaces.lifecycle:
         create:
           implementation: aws.cloudify_aws.ec2.instance.create
           inputs:
             args:
-              default:
-                block_device_map:
-                  '/dev/sda1':
-                    delete_on_termination: true
-                placement: { get_input: availability_zone }
-                user_data: { get_attribute: [ cloudify_host_cloud_config, cloud_config ] }
-      utils.ops:
-        restart_vm_op: utils-scripts/restart_vm.sh
-      cloudify.interfaces.monitoring_agent:
-          install:
-            implementation: diamond.diamond_agent.tasks.install
-            inputs:
-              diamond_config:
-                default:
-                  interval: 1
-          start: diamond.diamond_agent.tasks.start
-          stop: diamond.diamond_agent.tasks.stop
-          uninstall: diamond.diamond_agent.tasks.uninstall
-      cloudify.interfaces.monitoring:
-          start:
-            implementation: diamond.diamond_agent.tasks.add_collectors
-            inputs:
-              collectors_config:
-                default:
-                  CPUCollector: {}
-                  MemoryCollector: {}
-                  LoadAverageCollector: {}
-                  DiskUsageCollector:
-                    config:
-                      devices: x?vd[a-z]+[0-9]*$
-                  NetworkCollector: {}
+              # default:
+              block_device_map:
+                '/dev/sda1':
+                  delete_on_termination: true
+              placement: { get_input: availability_zone }
+              user_data: { get_attribute: [ cloudify_host_cloud_config, cloud_config ] }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: vpc
+      - type: cloudify.aws.relationships.instance_connected_to_security_group
+        target: drupal_security_group
+      - type: cloudify.aws.relationships.instance_connected_to_subnet
+        target: public_subnet
+      - target: apache_ip
+        type: cloudify.aws.relationships.instance_connected_to_elastic_ip
 
-  memcached_db_server:
-    derived_from: cloudify.nodes.DBMS
-    properties:
-      port:
-        description: Memcached port
-        type: integer
-
-  memcached_application:
-    derived_from: cloudify.nodes.ApplicationModule
-    properties:
-      port:
-        description: Memcached port
-        type: integer
-      requiredmemory:
-        description: Required memory size in MB
-        type: integer
-
-  apache_server:
-    derived_from: cloudify.nodes.WebServer
-    properties:
-      base_port:
-        description: Web application port
-        type: integer
-      needPhp:
-        description: Does this application require php
-        type: string
-      needMemcache:
-        description: Does this application require memcache
-        type: string
-      dbType:
-        description: Database type that this application requires
-        type: string
-      num_instances:
-        description: Number of instances
-        type: integer
-      drupalVersion:
-        description: Drupal version
-        type: string
-      newPort:
-        description: Apache port
-        type: integer
-      docRoot:
-        description: docRoot of the Apache
-        type: string
-
-  drupal_application:
-    derived_from: cloudify.nodes.ApplicationModule
-    properties:
-      drupalImageURL:
-        description: Drupal image zip URL
-        type: string
-      app_name:
-        description: Application name
-        type: string
-      dbName:
-        description: Database name
-        type: string
-      dbUserName:
-        description: DB user name
-        type: string
-      dbUserPassword:
-        description: DB user password
-        type: string
-      dbPort:
-        description: DB port number
-        type: string
-      dbHost:
-        description: DB host
-        type: string
-      docRoot:
-        description: docRoot of the Drupal
-        type: string
-
-
-relationships:
-
-  drupal_server_connected_to_mysql_database:
-    derived_from: cloudify.relationships.connected_to
-
-  drupal_app_connected_to_mysql_db:
-    derived_from: cloudify.relationships.depends_on
-    source_interfaces:
-      cloudify.interfaces.relationship_lifecycle:
-        establish: drupal-scripts/configure-mysql-drupal.sh
-
-  drupal_app_connected_to_memcached_app:
-    derived_from: cloudify.relationships.connected_to
-    source_interfaces:
-      cloudify.interfaces.relationship_lifecycle:
-        establish: drupal-scripts/configure-memcached-drupal.sh
-
-node_templates:
 
   drupal_security_group:
     type: cloudify.aws.nodes.SecurityGroup
     properties:
       aws_config: *aws_config
-      resource_id: { get_input: drupal_security_group_name }
       description: Security group for Cloudify Manager VM
       rules:
         - ip_protocol: tcp
@@ -314,99 +197,6 @@ node_templates:
       - type: cloudify.relationships.contained_in
         target: vpc
 
-  memcached_vm:
-    type: host
-    properties:
-      name: Memcached Instance
-    relationships:
-      - type: cloudify.aws.relationships.instance_connected_to_security_group
-        target: drupal_security_group
-      - type: cloudify.aws.relationships.instance_connected_to_subnet
-        target: private_subnet
-
-  apache_vm:
-    type: host
-    properties:
-      name: Apache Instance
-    relationships:
-      - type: cloudify.relationships.contained_in
-        target: vpc
-      - type: cloudify.aws.relationships.instance_connected_to_security_group
-        target: drupal_security_group
-      - type: cloudify.aws.relationships.instance_connected_to_subnet
-        target: public_subnet
-      - target: apache_ip
-        type: cloudify.aws.relationships.instance_connected_to_elastic_ip
-
-  memcached_server:
-    type: memcached_db_server
-    properties:
-      port: { get_input: memcachePort }
-    interfaces:
-      cloudify.interfaces.lifecycle:
-        create: memcached-scripts/install-memcached.sh
-        configure: memcached-scripts/configure-memcached.sh
-    relationships:
-      - target: memcached_vm
-        type: cloudify.relationships.contained_in
-
-  memcached_app:
-    type: memcached_application
-    properties:
-      port: { get_input: memcachePort }
-      requiredmemory: 1000
-    interfaces:
-      cloudify.interfaces.lifecycle:
-        start: memcached-scripts/start-memcached.sh
-        stop: memcached-scripts/stop-memcached.sh
-    relationships:
-      - target: memcached_server
-        type: cloudify.relationships.contained_in
-
-  drupal_server:
-    type: apache_server
-    properties:
-      base_port: 8080
-      num_instances: 1
-      needPhp: yesplease
-      needMemcache: yesplease
-      dbType: mysql
-      drupalVersion: 7
-      newPort: 80
-      docRoot: { get_input: docRoot }
-    interfaces:
-      cloudify.interfaces.lifecycle:
-        create: apache-scripts/install-apache.sh
-    relationships:
-      - type: cloudify.relationships.contained_in
-        target: apache_vm
-
-  drupal_app:
-    type: drupal_application
-    properties:
-      docRoot: { get_input: docRoot }
-      drupalImageURL: { get_input: drupalImageURL }
-      app_name: My drupal web server
-      dbName: { get_input: db_name }
-      dbUserName: { get_input: db_user_name }
-      dbUserPassword: { get_input: db_user_password }
-      dbPort: { get_input: db_port }
-      dbHost: { get_attribute: [ mysql_db, deployment, outputs, ip ] }
-    interfaces:
-      cloudify.interfaces.lifecycle:
-        start: apache-scripts/start-apache.sh
-        stop: apache-scripts/stop-apache.sh
-      drupal.interfaces.action:
-        install_project: drupal-scripts/drush-install.sh
-        set_variable: drupal-scripts/drush-setvar.sh
-    relationships:
-      - type: cloudify.relationships.contained_in
-        target: drupal_server
-      - type: drupal_app_connected_to_memcached_app
-        target: memcached_app
-      - type: drupal_app_connected_to_mysql_db
-        target: mysql_db
-
   public_subnet:
     type: cloudify.aws.nodes.Subnet
     properties:
@@ -453,73 +243,12 @@ node_templates:
             ssh-authorized-keys:
               - { get_input: agent_key_public }
 
-  mysql_db:
-    type: cloudify.nodes.DeploymentProxy
-    properties:
-      resource_config:
-        blueprint:
-          id: db
-          blueprint_archive: https://github.com/mabuaisha/mysqldb-blueprint/archive/master.zip
-          main_file_name: { get_input: environment_blueprint_filename }
-        deployment:
-          id: db
-          inputs:
-            db_name: { get_input: db_name }
-            db_user_name: { get_input: db_user_name }
-            db_user_password: { get_input: db_user_password }
-            db_port: { get_input: db_port }
-          outputs:
-            mysql_ip: ip
-
-plugins:
-
-   drush-plugin:
-      executor: central_deployment_agent
-      source: drush-plugin
-
-   utils-plugin:
-      executor: central_deployment_agent
-      source: utils-plugin
-
-workflows:
-
-   restart_vms:
-      mapping: utils-plugin.vms.tasks.restart_vms
-      parameters:
-        node_id:
-          description: The node id whose instance will be restarted
-        node_instance_id:
-          description: The node instance id which will be restarted - default(null) = All instances...
-          default: null
-        my_input:
-          description: Additional input
-          default: null
-
-   drush_install:
-      mapping: drush-plugin.drush.tasks.install_project
-      parameters:
-         project_name: {}
-
-   drush_setvar:
-      mapping: drush-plugin.drush.tasks.set_variable
-      parameters:
-         variable_name:
-           default: theme_default
-         variable_value: {}
-
 outputs:
 
   endpoint:
     description: My application endpoint
     value:
-      drupal_url: { concat: ['http://', { get_attribute: [apache_vm, public_ip_address] },':', { get_property: [drupal_server, newPort] }] }
-
-
-  mysql_ip:
-    description: My Database application endpoint
-    value:
-      mysql_ip: { get_attribute: [ mysql_db, deployment, outputs, ip ] }
-
+      drupal_url: { concat: ['http://', { get_attribute: [apache_vm, public_ip_address] },':80' ] }
 
 groups:
 
@@ -543,7 +272,7 @@ groups:
               workflow: scale
               workflow_parameters:
                 delta: 1
-                scalable_entity_name: apache
+                scalable_entity_name: drupal
 
   scale_down_group:
     members: [apache_vm]
@@ -564,24 +293,7 @@ groups:
               workflow: scale
               workflow_parameters:
                 delta: -1
-                scalable_entity_name: apache
-
-  heal_group:
-    members: [memcached_vm]
-    policies:
-      simple_autoheal_policy:
-        type: cloudify.policies.types.host_failure
-        properties:
-          service: ['cpu.total.user']
-          interval_between_workflows: 60
-        triggers:
-          auto_heal_trigger:
-            type: cloudify.policies.triggers.execute_workflow
-            parameters:
-              workflow: heal
-              workflow_parameters:
-                node_instance_id: { 'get_property': [ SELF, node_id ] }
-                diagnose_value: { 'get_property': [ SELF, diagnose ] }
+                scalable_entity_name: drupal
 
   apache:
     members: [apache_vm, apache_ip]
