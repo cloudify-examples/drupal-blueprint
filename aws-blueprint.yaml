@@ -111,7 +111,7 @@ node_templates:
       instance_type: { get_input: instance_type }
       agent_config:
         network: { get_input: manager_network }
-        install_method: remote
+        install_method: init_script
         user: { get_input: agent_user }
         port: 22
         key: { get_input: agent_key_private }
