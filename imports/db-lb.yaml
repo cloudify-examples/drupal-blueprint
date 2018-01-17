@@ -12,6 +12,9 @@ inputs:
   use_external_database:
     default: false
 
+  proxy_manager_network:
+    default: { get_input: manager_network }
+
 node_templates:
 
   mysqldb_endpoint:
@@ -26,6 +29,7 @@ node_templates:
         deployment:
           id: lb
           inputs:
+            manager_network: { get_input: proxy_manager_network }
             application_ip: ''
           outputs:
             ip: ip
@@ -44,6 +48,7 @@ node_templates:
               deployment:
                 id: { get_property: [ SELF, resource_config, deployment, id ] }
                 inputs:
+                  manager_network: { get_input: proxy_manager_network }
                   application_ip: { get_attribute: [ db, deployment, outputs, ips, 0 ] }
                 outputs:
                   ip: { get_property: [ SELF, resource_config, deployment, outputs, ip ] }
@@ -62,6 +67,7 @@ node_templates:
           inputs:
             new_database_user: { get_input: new_database_user}
             new_database_password: { get_input: new_database_password }
+            manager_network: { get_input: proxy_manager_network }
           outputs:
             cluster_addresses: ips
           external_resource: { get_input: use_external_database }
