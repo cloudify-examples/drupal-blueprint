@@ -23,8 +23,7 @@ node_templates:
       resource_config:
         blueprint:
           id: lb
-          # blueprint_archive: https://github.com/cloudify-examples/haproxy-blueprint/archive/e2e.zip
-          blueprint_archive: https://github.com/cloudify-examples/haproxy-blueprint/archive/eb15586b8485bc8b5528e7087184cf6345ef0ab1.zip
+          blueprint_archive: https://github.com/cloudify-examples/haproxy-blueprint/archive/e2e.zip
           main_file_name: { get_input: environment_blueprint_filename }
           external_resource: { get_input: use_external_database }
         deployment:
@@ -60,8 +59,7 @@ node_templates:
       resource_config:
         blueprint:
           id: db
-          # blueprint_archive: https://github.com/cloudify-examples/mariadb-blueprint/archive/e2e.zip
-          blueprint_archive: https://github.com/cloudify-examples/mariadb-blueprint/archive/6f86ba3610cdc115d134f3133e1ce5fdc2881083.zip
+          blueprint_archive: https://github.com/cloudify-examples/mariadb-blueprint/archive/e2e.zip
           main_file_name: { get_input: environment_blueprint_filename }
           external_resource: { get_input: use_external_database }
         deployment:
