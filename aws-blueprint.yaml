@@ -196,8 +196,8 @@ node_templates:
     properties:
       resource_config:
         kwargs:
-          GroupName: SaltExampleSecurityGroup
-          Description: Created by salt-blueprint aws-blueprint.yaml.
+          GroupName: DrupalSecurityGroup
+          Description: Created by drupal-blueprint aws-blueprint.yaml.
           VpcId: { get_input: vpc_id }
       client_config: *client_config
     relationships:
