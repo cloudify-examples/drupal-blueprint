@@ -36,8 +36,10 @@ node_templates:
           external_resource: { get_input: use_external_database }
         reexecute: false
     relationships:
-      - type: cloudify.relationships.depends_on
-        target: db
+    - type: cloudify.relationships.contained_in
+      target: AWS
+    - type: cloudify.relationships.depends_on
+      target: db
     interfaces:
       cloudify.interfaces.lifecycle:
         configure:
@@ -52,6 +54,12 @@ node_templates:
                   application_ip: { get_attribute: [ db, deployment, outputs, ips, 0 ] }
                 outputs:
                   ip: { get_property: [ SELF, resource_config, deployment, outputs, ip ] }
+        start:
+          implementation: cfy_util.cloudify_deployment_proxy.tasks.execute_start
+          inputs:
+            workflow_id: install
+            timeout: 1100
+            interval: 15
 
   db:
     type: cloudify.nodes.DeploymentProxy
@@ -72,3 +80,18 @@ node_templates:
             cluster_addresses: ips
           external_resource: { get_input: use_external_database }
         reexecute: false
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: AWS
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        start:
+          implementation: cfy_util.cloudify_deployment_proxy.tasks.execute_start
+          inputs:
+            workflow_id: install
+            timeout: 1100
+            interval: 15
+
+  AWS:
+    type: cloudify.nodes.Tier
+

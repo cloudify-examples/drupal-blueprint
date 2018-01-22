@@ -12,7 +12,7 @@ imports:
 inputs:
 
   environment_blueprint_filename:
-    default: openstack-blueprint.yaml
+    default: aws-blueprint.yaml
 
   keystone_username:
     default: { get_secret: keystone_username }
@@ -131,8 +131,10 @@ node_templates:
               flavor: { get_input: flavor }
               userdata: { get_attribute: [ cloudify_host_cloud_config, cloud_config ] }
     relationships:
-    - target: apache_vm_port
-      type: cloudify.openstack.server_connected_to_port
+    - type: cloudify.openstack.server_connected_to_port
+      target: apache_vm_port
+    - type: cloudify.relationships.contained_in
+      target: public_network
 
   drupal_security_group:
     type: cloudify.openstack.nodes.SecurityGroup
@@ -161,6 +163,9 @@ node_templates:
           port: 8101
         - remote_ip_prefix: 0.0.0.0/0
           port: 8100
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: OPENSTACK
 
   apache_ip:
     type: cloudify.openstack.nodes.FloatingIP
@@ -173,22 +178,22 @@ node_templates:
       floatingip:
         floating_network_name: { get_property: [ external_network, resource_id ] }
     relationships:
-      - type: cloudify.relationships.contained_in
-        target: public_network
-
+    - type: cloudify.relationships.contained_in
+      target: public_network
+  
   apache_vm_port:
     type: cloudify.openstack.nodes.Port
     properties:
       openstack_config: *openstack_config
     relationships:
-      - type: cloudify.relationships.contained_in
-        target: public_network
-      - type: cloudify.relationships.depends_on
-        target: public_subnet
-      - type: cloudify.openstack.port_connected_to_security_group
-        target: drupal_security_group
-      - type: cloudify.openstack.port_connected_to_floating_ip
-        target: apache_ip
+    - type: cloudify.relationships.contained_in
+      target: public_network
+    - type: cloudify.relationships.depends_on
+      target: public_subnet
+    - type: cloudify.openstack.port_connected_to_security_group
+      target: drupal_security_group
+    - type: cloudify.openstack.port_connected_to_floating_ip
+      target: apache_ip
 
   private_subnet:
     type: cloudify.openstack.nodes.Subnet
@@ -197,8 +202,8 @@ node_templates:
       use_external_resource: true
       resource_id: { get_input: private_subnet_name }
     relationships:
-      - target: private_network
-        type: cloudify.relationships.contained_in
+    - target: private_network
+      type: cloudify.relationships.contained_in
 
   private_network:
     type: cloudify.openstack.nodes.Network
@@ -206,6 +211,9 @@ node_templates:
       openstack_config: *openstack_config
       use_external_resource: true
       resource_id: { get_input: private_network_name }
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: OPENSTACK
 
   public_subnet:
     type: cloudify.openstack.nodes.Subnet
@@ -214,10 +222,10 @@ node_templates:
       use_external_resource: true
       resource_id: { get_input: public_subnet_name }
     relationships:
-      - target: public_network
-        type: cloudify.relationships.contained_in
-      - target: router
-        type: cloudify.openstack.subnet_connected_to_router
+    - target: public_network
+      type: cloudify.relationships.contained_in
+    - target: router
+      type: cloudify.openstack.subnet_connected_to_router
 
   public_network:
     type: cloudify.openstack.nodes.Network
@@ -225,6 +233,9 @@ node_templates:
       openstack_config: *openstack_config
       use_external_resource: true
       resource_id: { get_input: public_network_name }
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: OPENSTACK
 
   router:
     type: cloudify.openstack.nodes.Router
@@ -233,8 +244,10 @@ node_templates:
       use_external_resource: true
       resource_id: { get_input: router_name }
     relationships:
-      - target: external_network
-        type: cloudify.relationships.connected_to
+    - target: external_network
+      type: cloudify.relationships.connected_to
+    - type: cloudify.relationships.contained_in
+      target: OPENSTACK
 
   external_network:
     type: cloudify.openstack.nodes.Network
@@ -243,8 +256,10 @@ node_templates:
       use_external_resource: true
       resource_id: { get_input: external_network_name }
     relationships:
-      - type: cloudify.relationships.depends_on
-        target: cloudify_host_cloud_config
+    - type: cloudify.relationships.depends_on
+      target: cloudify_host_cloud_config
+    - type: cloudify.relationships.contained_in
+      target: OPENSTACK
 
   cloudify_host_cloud_config:
     type: cloudify.nodes.CloudInit.CloudConfig
@@ -257,6 +272,12 @@ node_templates:
             sudo: ['ALL=(ALL) NOPASSWD:ALL']
             ssh-authorized-keys:
               - { get_input: agent_key_public }
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: OPENSTACK
+
+  OPENSTACK:
+    type: cloudify.nodes.Tier
 
 outputs:
 
@@ -287,7 +308,7 @@ groups:
               workflow: scale
               workflow_parameters:
                 delta: 1
-                scalable_entity_name: drupal
+                scalable_entity_name: apache
 
   scale_down_group:
     members: [apache_vm]
@@ -308,14 +329,15 @@ groups:
               workflow: scale
               workflow_parameters:
                 delta: -1
-                scalable_entity_name: drupal
+                scalable_entity_name: apache
 
   apache:
-    members: [apache_vm, apache_vm_port]
+    members: [drupal, apache_vm, apache_vm_port, apache_ip]
 
 policies:
   scale_policy1:
     type: cloudify.policies.scaling
     properties:
       default_instances: 1
+      max_instances: 1
     targets: [apache]
