@@ -1,0 +1,228 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/4.2/types.yaml
+  - http://www.getcloudify.org/spec/utilities-plugin/1.4.5/plugin.yaml
+  - http://www.getcloudify.org/spec/diamond-plugin/1.3.6/plugin.yaml
+  - http://www.getcloudify.org/spec/openstack-plugin/2.6.0/plugin.yaml
+  - http://www.getcloudify.org/spec/dblb/0.2/plugin.yaml
+  - imports/scale.yaml
+  - imports/db-lb.yaml
+
+inputs:
+
+  environment_blueprint_filename:
+    default: openstack.yaml
+
+  agent_key_private:
+    description: >
+      The content of the agent's private key.
+    default: { get_secret: agent_key_private }
+
+  agent_key_public:
+    description: >
+      The content of the agent's public key.
+    default: { get_secret: agent_key_public }
+
+  agent_user:
+    description: >
+      The username of the agent running on the instance created from the image.
+    default: centos
+
+  image:
+    description: >
+      An Openstack Image ID. Tested with a Ubuntu 14.04 image.
+    type: string
+
+  flavor:
+    description: >
+      An Openstack Flavor ID.
+    default: '2'
+
+  manager_network:
+    default: external
+
+  network_deployment_name:
+    default: openstack-example-network
+
+dsl_definitions:
+
+  openstack_config: &openstack_config
+    username: { get_secret: keystone_username }
+    password: { get_secret: keystone_password }
+    tenant_name: { get_secret: keystone_tenant_name }
+    auth_url: { get_secret: keystone_url }
+    region: { get_secret: keystone_region }
+
+node_templates:
+
+  drupal:
+    type: cloudify.nodes.Root
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create:
+          implementation: scripts/install-drupal.sh
+        configure:
+          implementation: scripts/create-db.py
+          inputs: &database_connection
+            db_host: { get_attribute: [ mysqldb_endpoint, deployment, outputs, ip ] }
+            db_user_name: { get_input: new_database_user }
+            db_password: { get_input: new_database_password }
+            db_name: { get_input: db_name }
+        delete:
+          implementation: scripts/delete-db.py
+          inputs: *database_connection
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: host
+    - type: cloudify.relationships.depends_on
+      target: mysqldb_endpoint
+
+  host:
+    type: cloudify.openstack.nodes.Server
+    properties:
+      openstack_config: *openstack_config
+      agent_config:
+        network: { get_input: manager_network }
+        user: { get_input: agent_user }
+        install_method: init_script
+        port: 22
+        key: { get_input: agent_key_private }
+      server:
+        key_name: ''
+        image: { get_input: image }
+        flavor: { get_input: flavor }
+      management_network_name: ''
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create:
+          implementation: openstack.nova_plugin.server.create
+          inputs:
+            args:
+              image: { get_input: image }
+              flavor: { get_input: flavor }
+              userdata: { get_attribute: [ cloudify_host_cloud_config, cloud_config ] }
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: openstack
+    - type: cloudify.openstack.server_connected_to_port
+      target: port
+    - type: cloudify.relationships.depends_on
+      target: cloudify_host_cloud_config
+
+  port:
+    type: cloudify.openstack.nodes.Port
+    properties:
+      openstack_config: *openstack_config
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: public_network
+    - type: cloudify.relationships.depends_on
+      target: public_subnet
+    - type: cloudify.openstack.port_connected_to_security_group
+      target: security_group
+    - type: cloudify.openstack.port_connected_to_floating_ip
+      target: ip
+
+  public_subnet:
+    type: cloudify.openstack.nodes.Subnet
+    properties:
+      openstack_config: *openstack_config
+      use_external_resource: true
+      resource_id: { get_attribute: [ openstack, deployment, outputs, public_subnet ] }
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: public_network
+
+  public_network:
+    type: cloudify.openstack.nodes.Network
+    properties:
+      openstack_config: *openstack_config
+      use_external_resource: true
+      resource_id: { get_attribute: [ openstack, deployment, outputs, public_network ] }
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: openstack
+
+  security_group:
+    type: cloudify.openstack.nodes.SecurityGroup
+    properties:
+      openstack_config: *openstack_config
+      security_group:
+        description: generic security group
+      rules:
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 8080
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 8000
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 8081
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 22
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 80
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 3306
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 55672
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 5672
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 53229
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 8101
+        - remote_ip_prefix: 0.0.0.0/0
+          port: 8100
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: openstack
+
+  ip:
+    type: cloudify.openstack.nodes.FloatingIP
+    properties:
+      openstack_config: *openstack_config
+      floatingip:
+        floating_network_id: { get_attribute: [ openstack, deployment, outputs, external_network ] }
+    relationships:
+    - type: cloudify.relationships.contained_in
+      target: openstack
+
+  openstack:
+    type: cloudify.nodes.DeploymentProxy
+    properties:
+      resource_config:
+        blueprint:
+          id: { get_input: network_deployment_name }
+          blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
+          main_file_name: simple-blueprint.yaml
+          external_resource: external
+        deployment:
+          id: { get_input: network_deployment_name }
+          outputs:
+            external_network: external_network
+            public_network_router: public_network_router
+            public_network: public_network
+            private_network: private_network
+            public_subnet: public_subnet
+            private_subnet: private_subnet
+          external_resource: external
+        reexecute: false
+
+  cloudify_host_cloud_config:
+    type: cloudify.nodes.CloudInit.CloudConfig
+    properties:
+      resource_config:
+        manage_etc_hosts: True
+        users:
+          - name: { get_input: agent_user }
+            shell: /bin/bash
+            sudo: ['ALL=(ALL) NOPASSWD:ALL']
+            ssh-authorized-keys:
+              - { get_input: agent_key_public }
+
+outputs:
+
+  endpoint:
+    description: My application endpoint
+    value:
+      drupal_url: { concat: ['http://', { get_attribute: [ip, floating_ip_address] },':80' ] }
