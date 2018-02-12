@@ -2,7 +2,7 @@
 
 # Drupal Blueprint
 
-This blueprint deploys a Drupal CMS. This blueprint is part of the *End-to-end Solutions Package*, which demonstrates functionality in Cloudify using a Database, Load Balancer, and several front-end applications. Before installing this deployment, install the [MariaDB Blueprint](https://github.com/cloudify-examples/mariadb-blueprint), the [HAProxy Blueprint](https://github.com/cloudify-examples/haproxy-blueprint). Following the drupal deployment, continue with installing the [Kubernetes Cluster](http://docs.getcloudify.org/4.2.0/plugins/container-support/) and the [Wordpress Application](https://github.com/EarthmanT/db-lb-app).
+This blueprint deploys a Drupal CMS. This blueprint is part of the *End-to-end Solutions Package*, which demonstrates functionality in Cloudify using an existing Database and Load Balancer provided as deploy time inputs, and several front-end applications. Before installing this deployment, install the [MariaDB Blueprint](https://github.com/cloudify-examples/mariadb-blueprint), the [HAProxy Blueprint](https://github.com/cloudify-examples/haproxy-blueprint). Following the drupal deployment, continue with installing the [Kubernetes Cluster](http://docs.getcloudify.org/4.2.0/plugins/container-support/) and the [Wordpress Application](https://github.com/EarthmanT/db-lb-app).
 
 
 ## Compatibility
