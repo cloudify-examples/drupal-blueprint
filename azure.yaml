@@ -1,11 +1,10 @@
 tosca_definitions_version: cloudify_dsl_1_3
 
 imports:
-  - http://www.getcloudify.org/spec/cloudify/4.2/types.yaml
-  - http://www.getcloudify.org/spec/utilities-plugin/1.4.5/plugin.yaml
-  - http://www.getcloudify.org/spec/diamond-plugin/1.3.5/plugin.yaml
-  - http://www.getcloudify.org/spec/azure-plugin/1.5.1/plugin.yaml
-  - http://www.getcloudify.org/spec/dblb/0.2/plugin.yaml
+  - http://www.getcloudify.org/spec/cloudify/4.3/types.yaml
+  - plugin:cloudify-azure-plugin
+  - plugin:cloudify-utilities-plugin
+  - plugin:cloudify-dblb
   - imports/scale.yaml
   - imports/db-lb.yaml
 

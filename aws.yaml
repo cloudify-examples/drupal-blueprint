@@ -84,6 +84,7 @@ node_templates:
   host:
     type: cloudify.nodes.aws.ec2.Instances
     properties:
+      use_public_ip: true
       agent_config:
         network: { get_input: manager_network }
         install_method: init_script
