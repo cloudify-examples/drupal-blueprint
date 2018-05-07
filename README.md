@@ -8,10 +8,21 @@ This blueprint deploys a Drupal CMS. This blueprint is part of the *End-to-end S
 ## Compatibility
 
 Tested with:
-  * Cloudify 4.2
+  * Cloudify 4.3.1
 
 
 ## Pre-installation steps
+
+**Please note the following requirement for manager configuration.**
+
+This example requires configuration of [multiple management (agent) networks](https://docs.cloudify.co/4.3.0/install_maintain/installation/installing-manager/#multi-network-management) upon installation of your Cloudify Manager.
+
+The required name of the agent network is `external`, and should map to a public IP address. For example:
+
+```bash
+[centos@ip-10-10-4-47 ~]$ sudo grep "networks" /etc/cloudify/config.yaml 
+    networks: {default: 10.10.4.47, external: 54.67.45.103}
+```
 
 Upload the required plugins:
 
