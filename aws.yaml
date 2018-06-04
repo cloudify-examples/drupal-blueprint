@@ -44,6 +44,9 @@ inputs:
   network_deployment_name:
     default: aws-example-network
 
+  use_existing_network_deployment:
+    default: true
+
 dsl_definitions:
 
   aws_config: &aws_config
@@ -251,7 +254,7 @@ node_templates:
           id: { get_input: network_deployment_name }
           blueprint_archive: https://github.com/cloudify-examples/aws-example-network/archive/master.zip
           main_file_name: simple-blueprint.yaml
-          external_resource: external
+          external_resource: { get_input: use_existing_network_deployment }
         deployment:
           id: { get_input: network_deployment_name }
           outputs:
@@ -260,7 +263,7 @@ node_templates:
             ec2_region_name: ec2_region_name
             ec2_region_endpoint: ec2_region_endpoint
             availability_zone: availability_zone
-          external_resource: external
+          external_resource: { get_input: use_existing_network_deployment }
         reexecute: false
 
   cloudify_host_cloud_config:

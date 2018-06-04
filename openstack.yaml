@@ -45,6 +45,9 @@ inputs:
   network_deployment_name:
     default: openstack-example-network
 
+  use_existing_network_deployment:
+    default: true
+
 dsl_definitions:
 
   openstack_config: &openstack_config
@@ -195,7 +198,7 @@ node_templates:
           id: { get_input: network_deployment_name }
           blueprint_archive: https://github.com/cloudify-examples/openstack-example-network/archive/master.zip
           main_file_name: simple-blueprint.yaml
-          external_resource: external
+          external_resource: { get_input: use_existing_network_deployment }
         deployment:
           id: { get_input: network_deployment_name }
           outputs:
@@ -205,7 +208,7 @@ node_templates:
             private_network: private_network
             public_subnet: public_subnet
             private_subnet: private_subnet
-          external_resource: external
+          external_resource: { get_input: use_existing_network_deployment }
         reexecute: false
 
   cloudify_host_cloud_config:
