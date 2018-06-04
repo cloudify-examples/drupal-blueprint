@@ -58,6 +58,9 @@ inputs:
   network_deployment_name:
     default: azure-example-network
 
+  use_existing_network_deployment:
+    default: true
+
 dsl_definitions:
 
   azure_config: &azure_config
@@ -345,7 +348,7 @@ node_templates:
           id: { get_input: network_deployment_name }
           blueprint_archive: https://github.com/cloudify-examples/azure-example-network/archive/master.zip
           main_file_name: simple-blueprint.yaml
-          external_resource: external
+          external_resource: { get_input: use_existing_network_deployment }
         deployment:
           id: { get_input: network_deployment_name }
           outputs:
@@ -353,7 +356,7 @@ node_templates:
             virtual_network: virtual_network
             public_subnet: public_subnet
             location: location
-          external_resource: external
+          external_resource: { get_input: use_existing_network_deployment }
         reexecute: false
 
 outputs:
