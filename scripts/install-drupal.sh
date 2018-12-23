@@ -2,24 +2,38 @@
 set -e
 
 ctx logger info "Installing apache2 mysql-client and some tools."
-
+echo "Installing apache2 mysql-client and some tools"
 sudo apt-get update -qq
 sudo apt-get install -y -qq unzip wget apache2 php5 libapache2-mod-php5 php5-mcrypt php5-gd mysql-client php5-mysqlnd-ms
 pushd $HOME
+echo "delete drupal and get new wget drupal"
+rm -f drupal-8.4.4.zip
 wget --quiet -O drupal-8.4.4.zip https://ftp.drupal.org/files/projects/drupal-8.4.4.zip
+echo "delete dir and unzip drupal"
+rm -rf drupal-8.4.4/
 unzip drupal-8.4.4.zip
 
 ctx logger info "Installing Drupal packages."
+echo "Installing Drupal packages."
 
 pushd $HOME/drupal-8.4.4
+
+echo "copy('https://getcomposer.org/installer', 'composer-setup.php');"
 php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
-php -r "if (hash_file('SHA384', 'composer-setup.php') === '544e09ee996cdf60ece3804abc52599c22b1f40f4323403c44d44fdfdd586475ca9813a858088ffbc1f233e9b180f061') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+#php -r "if (hash_file('SHA384', 'composer-setup.php') === '544e09ee996cdf60ece3804abc52599c22b1f40f4323403c44d44fdfdd586475ca9813a858088ffbc1f233e9b180f061') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+
+echo "php composer-setup.php"
 php composer-setup.php
+
+echo "php -r unlink('composer-setup.php');"
 php -r "unlink('composer-setup.php');"
+
+echo "./composer.phar install"
 ./composer.phar install
+
 sudo cp -R . /var/www/html
 popd
-sudo rm /var/www/html/index.html
+sudo rm -f /var/www/html/index.html
 
 ctx logger info "Creating the Drupal Database."
 
