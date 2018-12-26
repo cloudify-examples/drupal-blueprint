@@ -5,7 +5,12 @@ ctx logger info "Installing apache2 mysql-client and some tools."
 echo "Installing apache2 mysql-client and some tools"
 sudo apt-get update -qq
 sudo apt-get install -y -qq unzip wget apache2 php5 libapache2-mod-php5 php5-mcrypt php5-gd mysql-client php5-mysqlnd-ms
-pushd $HOME
+
+FOLDER="$(mktemp -d)"
+COMPOSER_HOME=$FOLDER
+export COMPOSER_HOME=$FOLDER
+
+cd $FOLDER
 echo "delete drupal and get new wget drupal"
 rm -f drupal-8.4.4.zip
 wget --quiet -O drupal-8.4.4.zip https://ftp.drupal.org/files/projects/drupal-8.4.4.zip
@@ -16,7 +21,7 @@ unzip drupal-8.4.4.zip
 ctx logger info "Installing Drupal packages."
 echo "Installing Drupal packages."
 
-pushd $HOME/drupal-8.4.4
+cd $FOLDER/drupal-8.4.4
 
 echo "copy('https://getcomposer.org/installer', 'composer-setup.php');"
 php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
@@ -32,7 +37,7 @@ echo "./composer.phar install"
 ./composer.phar install
 
 sudo cp -R . /var/www/html
-popd
+
 sudo rm -f /var/www/html/index.html
 
 ctx logger info "Creating the Drupal Database."
